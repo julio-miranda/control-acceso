@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Registro - Control de Asistencia</title>
+  <link rel="stylesheet" href="css/styles.css">
+
+  <!-- Librerías necesarias -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bcryptjs/2.2.0/bcrypt.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/js-cookie/3.0.5/js.cookie.min.js"></script>
+
+  <!-- Supabase (CDN) y configuración -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+
+  <!-- Lógica de autenticación / utilidades -->
+  <script src="js/auth.js"></script>
+
+  <!-- MVC -->
+  <script defer src="js/models/register.model.js"></script>
+  <script defer src="js/controllers/register.controller.js"></script>
+</head>
+
+<body>
+  <div class="section">
+    <h2>Registro</h2>
+    <form id="register-form" action="#" method="post">
+      <input id="register-nombre" name="nombre" type="text" placeholder="Nombre" required>
+      <input id="register-numero" name="numero_identidad" type="text" placeholder="Número de Identidad" required>
+      <input id="register-identificacionNombre" name="tipo_documento" type="text" placeholder="Tipo de Documento"
+        required>
+
+      <label for="register-Fecha">Fecha de Nacimiento</label>
+      <input id="register-Fecha" name="fecha_nacimiento" type="date" required>
+
+      <input id="register-isss" name="isss" type="text" placeholder="Número ISSS">
+      <input id="register-afp" name="afp" type="text" placeholder="Número AFP">
+
+      <!-- Sección de Empresa -->
+      <div id="empresa-select-container">
+        <label for="register-empresa-select">Empresa</label>
+        <select id="register-empresa-select" name="empresa" required>
+          <option value="" selected>Selecciona una empresa</option>
+          <!-- Opciones generadas dinámicamente -->
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+
+      <!-- Contenedor para ingreso manual del nombre de la empresa -->
+      <div id="manual-empresa-container" style="display: none;">
+        <input id="register-empresa-manual" name="empresa_manual" type="text" placeholder="Nombre de la Empresa">
+      </div>
+
+      <!-- Sección de Sucursal -->
+      <div id="sucursal-select-container">
+        <label for="register-sucursal-select">Sucursal</label>
+        <select id="register-sucursal-select" name="sucursal" required>
+          <option value="" selected>Selecciona una sucursal</option>
+          <!-- Opciones generadas dinámicamente -->
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+
+      <!-- Contenedor para ingreso manual del número de sucursal -->
+      <div id="manual-sucursal-container" style="display: none;">
+        <input id="register-sucursal-manual" name="sucursal_manual" type="text"
+          placeholder="Número o nombre de Sucursal">
+      </div>
+
+      <input id="register-direccion" name="direccion" type="text" placeholder="Dirección Personal" required>
+      <input id="register-telefono" name="telefono" type="tel" placeholder="Teléfono Personal" required>
+      <input id="register-email" name="email" type="email" placeholder="Correo Electrónico"
+        pattern="^[^\s@]+@[^\s@]+\.[^\s@]+$" required>
+      <input id="register-password" name="password" type="password" placeholder="Contraseña" required>
+      <input id="register-password2" name="password2" type="password" placeholder="Confirmar Contraseña" required>
+
+      <button type="submit">Registrarse</button>
+    </form>
+
+    <p>¿Ya tienes cuenta? <a href="index.html">Inicia Sesión</a></p>
+  </div>
+</body>
+
+</html>

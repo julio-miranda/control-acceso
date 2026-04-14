@@ -1,0 +1,70 @@
+# =========================================================================
+# ARCHIVOS LOCALES Y DE ENTORNO DE DESARROLLO
+# =========================================================================
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Respaldo de Base de Datos Local (Evita subir datos sensibles)
+backup.sql
+
+# =========================================================================
+# CONFIGURACIÓN DE SUPABASE (SOLO CÓDIGO FUENTE)
+# =========================================================================
+# Estado y archivos temporales locales de Supabase
+supabase/.temp/
+supabase/cli-latest
+
+# Archivos de estado de la CLI y versiones de servicios locales
+supabase/*-version
+supabase/project-ref
+supabase/pooler-url
+supabase/rest-version
+
+# =========================================================================
+# CONFIGURACIÓN DE FIREBASE Y LOGS
+# =========================================================================
+# Logs de sistema y errores
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+firebase-debug.log*
+firebase-debug.*.log*
+
+# Firebase cache y tokens locales
+.firebase/
+.npmrc
+
+# NOTA SOBRE .firebaserc: 
+# Si trabajas solo, déjalo sin comentar (se subirá al repositorio). 
+# Si compartes el código y cada quien usa un proyecto de Firebase distinto, quita el '#' de abajo:
+# .firebaserc
+
+# Archivos generados por Firebase Data Connect
+.dataconnect
+
+# =========================================================================
+# DEPENDENCIAS Y PROCESOS DE NODE/RUNTIME
+# =========================================================================
+# Directorios de dependencias y cachés
+node_modules/
+.npm
+.eslintcache
+.node_repl_history
+*.tgz
+.yarn-integrity
+
+# Runtime data y procesos locales
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Variables de entorno (Contienen credenciales secretas)
+.env
+
+# Archivos de bloqueo excluidos
+public/bloqueo.html
+public/js/blocker.js
