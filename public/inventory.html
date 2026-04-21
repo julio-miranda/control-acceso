@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Inventario - Sistema de Gestión</title>
+
+    <link rel="stylesheet" href="css/app.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
+</head>
+
+<body data-page="inventory">
+    <nav>
+        <div class="navbar-logo">
+            <a href="dashboard.html">Vértigo</a>
+        </div>
+
+        <button id="menu-toggle" class="menu-toggle" aria-label="Abrir menú" type="button">&#9776;</button>
+
+        <div id="navbar-links" class="navbar-right">
+            <ul id="menu">
+                <li><a href="admin_perfil.html">Perfil</a></li>
+                <li><a href="admin_empleados.html">Empleados</a></li>
+                <li><a href="clientes_vip.html">VIP</a></li>
+                <li><a href="admin_asistencias.html">Asistencias</a></li>
+                <li><a href="admin_jornadas.html">Jornadas</a></li>
+                <li><a href="admin_planilla.html">Planilla</a></li>
+                <li><a href="sales.html">Ventas</a></li>
+                <li><a href="reservas.html">Reservas</a></li>
+                <li><a href="admin_metricas_satisfaccion.html">Encuesta</a></li>
+                <li>
+                    <button id="btnDescargarQr" type="button">Generar QR Empresa</button>
+                    <div id="qr-container" style="margin-top:10px;"></div>
+                </li>
+                <li>
+                    <button id="logout-button" type="button">Cerrar Sesión</button>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="dashboard" role="main" aria-live="polite">
+        <section class="stats-container">
+            <div class="stat-card">
+                <h3>Productos registrados</h3>
+                <p id="totalProductsCard">—</p>
+            </div>
+
+            <div class="stat-card">
+                <h3>Valor total inventario</h3>
+                <p id="totalValueCard">—</p>
+            </div>
+
+            <div class="stat-card">
+                <h3>Productos con stock bajo</h3>
+                <p id="lowStockCard">—</p>
+            </div>
+        </section>
+
+        <p class="section-note" style="margin:10px 0 16px; color:var(--muted); font-size:14px;">
+            Este inventario soporta stock decimal, tipos de producto y recetas.
+        </p>
+
+        <div class="panel-actions" style="justify-content:space-between; margin-bottom:16px;">
+            <input id="salesSearch" type="search" placeholder="Buscar producto..." aria-label="Buscar productos" style="flex:1; min-width:260px;" />
+
+            <div class="panel-actions">
+                <button id="btnAdd" class="btn-primary" type="button">
+                    <i class="fas fa-plus"></i> Añadir Producto
+                </button>
+
+                <button id="btnRecetas" class="btn-outline" type="button">
+                    <i class="fas fa-book"></i> Gestionar Recetas
+                </button>
+            </div>
+        </div>
+
+        <section class="table-container section-spacing">
+            <table id="inventoryTable" class="table">
+                <thead>
+                    <tr>
+                        <th>Nombre</th>
+                        <th>Tipo</th>
+                        <th>Cantidad</th>
+                        <th>Precio</th>
+                        <th>Sugerido</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </section>
+
+        <section id="recetasPanel" class="table-container section-spacing" style="display:none;">
+            <div class="section-header">
+                <h2>Recetas</h2>
+            </div>
+
+            <div class="table-container" style="padding:0; box-shadow:none; border:none; margin:0;">
+                <table id="recetasTable" class="table">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Descripción</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="lowStockPanel" class="low-stock-panel table-container" style="display:none;"></section>
+    </main>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="js/supabase-config.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script src="js/auth.js"></script>
+    <script src="js/models/inventory.model.js"></script>
+    <script src="js/controllers/inventory.controller.js"></script>
+</body>
+</html>

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ventas</title>
+
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+  <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+</head>
+
+<body data-page="sales">
+  <nav>
+    <div class="navbar-logo">
+      <a href="dashboard.html">Vértigo</a>
+    </div>
+
+    <button id="menu-toggle" class="menu-toggle" aria-label="Abrir menú" type="button">&#9776;</button>
+
+    <div id="navbar-links" class="navbar-right">
+      <ul id="menu">
+        <li><a href="admin_perfil.html">Perfil</a></li>
+        <li><a href="admin_empleados.html">Empleados</a></li>
+        <li><a href="clientes_vip.html">VIP</a></li>
+        <li><a href="admin_asistencias.html">Asistencias</a></li>
+        <li><a href="admin_jornadas.html">Jornadas</a></li>
+        <li><a href="admin_planilla.html">Planilla</a></li>
+        <li><a href="inventory.html">Inventario</a></li>
+        <li><a href="reservas.html">Reservas</a></li>
+        <li><a href="admin_metricas_satisfaccion.html">Encuesta</a></li>
+        <li>
+          <button id="btnDescargarQr" type="button">Generar QR Empresa</button>
+          <div id="qr-container" style="margin-top:10px;"></div>
+        </li>
+        <li>
+          <button id="logout-button" type="button">Cerrar Sesión</button>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <main class="dashboard" role="main">
+    <section class="table-container section-spacing">
+      <h3>Carrito de venta</h3>
+
+      <div class="sales-toolbar">
+        <div class="toolbar-field product-select-wrapper">
+          <label for="productSelect">Producto</label>
+          <select id="productSelect"></select>
+        </div>
+
+        <div class="toolbar-field qty-wrapper">
+          <label for="saleQuantity">Cant.</label>
+          <input id="saleQuantity" type="number" min="1" value="1">
+        </div>
+
+        <div class="toolbar-field qty-wrapper">
+          <label for="paymentMethod">Pago</label>
+          <select id="paymentMethod">
+            <option value="efectivo">Efectivo</option>
+            <option value="tarjeta">Tarjeta</option>
+            <option value="transferencia">Transferencia</option>
+          </select>
+        </div>
+
+        <button id="btnAddToCart" class="btn-primary" type="button">Agregar producto</button>
+        <button id="btnAddCombo" class="btn-primary" type="button">Agregar combo</button>
+        <button id="btnClearCart" class="btn-outline" type="button">Limpiar</button>
+      </div>
+
+      <table id="cartTable" class="table">
+        <thead>
+          <tr>
+            <th>Producto</th>
+            <th>Cantidad</th>
+            <th>Precio</th>
+            <th>Total</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+
+      <div class="cart-summary">
+        <strong>Subtotal:</strong>
+        <strong id="cartSubtotal">$0.00</strong>
+      </div>
+
+      <div class="cart-summary-actions">
+        <button id="btnFinalize" class="btn-primary" type="button">Finalizar Venta</button>
+        <button id="btnSaveDraft" class="btn-outline" type="button">Guardar Borrador</button>
+      </div>
+    </section>
+
+    <section class="table-container">
+      <h3>Ventas recientes</h3>
+
+      <table id="salesTable" class="table">
+        <thead>
+          <tr>
+            <th>Productos</th>
+            <th>Total</th>
+            <th>Usuario</th>
+            <th>Fecha</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script src="js/supabase-config.js"></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+  <script src="js/auth.js"></script>
+  <script src="js/models/sales.model.js"></script>
+  <script src="js/controllers/sales.controller.js"></script>
+</body>
+</html>
