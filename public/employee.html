@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Módulo Empleado - Control de Asistencia</title>
+  <link rel="stylesheet" href="css/styles.css" />
+
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+
+  <!-- Seguridad / sesión -->
+  <script src="js/auth.js"></script>
+
+  <!-- MVC -->
+  <script src="js/models/employee.model.js"></script>
+  <script src="js/controllers/employee.controller.js"></script>
+</head>
+
+<body>
+  <div class="section">
+    <h2>Módulo Empleado</h2>
+    <p>Escanea el QR para registrar tu asistencia.</p>
+
+    <div id="reader" style="width:320px; max-width:100%;"></div>
+    <div id="qr-result" style="margin-top:12px;"></div>
+    <div id="resultado" style="margin-top:8px;"></div>
+
+    <button id="logout-button">Cerrar Sesión</button>
+  </div>
+
+  <div id="justificationModal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%);
+       background:#fff; padding:20px; border:1px solid #ccc; box-shadow:0 0 10px rgba(0,0,0,0.3); z-index:1000;">
+    <h3>Justificación de llegada tarde</h3>
+    <textarea id="justificationText" rows="4" cols="50"></textarea>
+    <br />
+    <button id="saveJustificationButton">Guardar</button>
+  </div>
+
+  <div style="margin-top:12px;">
+    <select id="jornadasSelect" style="display:none; min-width:220px;"></select>
+    <button id="btnConfirmarJornada" style="display:none;">Confirmar Jornada</button>
+  </div>
+</body>
+</html>

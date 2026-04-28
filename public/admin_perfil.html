@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin — Perfil</title>
+  <link rel="stylesheet" href="css/app.css">
+  <script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
+</head>
+
+<body data-page="perfil">
+  <nav>
+    <div class="navbar-logo">
+      <a href="dashboard.html">Vértigo</a>
+    </div>
+
+    <button id="menu-toggle" class="menu-toggle" type="button">&#9776;</button>
+
+    <div id="navbar-links" class="navbar-right">
+      <ul id="menu">
+        <li><a href="admin_empleados.html">Empleados</a></li>
+        <li><a href="clientes_vip.html">VIP</a></li>
+        <li><a href="admin_asistencias.html">Asistencias</a></li>
+        <li><a href="admin_jornadas.html">Jornadas</a></li>
+        <li><a href="admin_planilla.html">Planilla</a></li>
+        <li><a href="inventory.html">Inventario</a></li>
+        <li><a href="sales.html">Ventas</a></li>
+        <li><a href="reservas.html">Reservas</a></li>
+        <li><a href="admin_metricas_satisfaccion.html">Encuesta</a></li>
+        <li>
+          <button id="btnDescargarQr" type="button">Generar QR Empresa</button>
+          <div id="qr-container" style="margin-top:10px;"></div>
+        </li>
+        <li>
+          <button id="logout-button" type="button">Cerrar Sesión</button>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <div id="perfil-container" class="form-container">
+    <h2>Editar Perfil</h2>
+
+    <form id="perfil-form">
+      <div class="form-field">
+        <label for="nombre">Nombre</label>
+        <input type="text" id="nombre" name="nombre" required>
+      </div>
+
+      <div class="form-field">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required>
+      </div>
+
+      <div class="form-field">
+        <label for="identificacionNombre">Tipo de Documento</label>
+        <input type="text" id="identificacionNombre" required>
+      </div>
+
+      <div class="form-field">
+        <label for="identificacion">Identificación</label>
+        <input type="text" id="identificacion" name="identificacion" required>
+      </div>
+
+      <div class="form-field">
+        <label for="nacimiento">Fecha de Nacimiento</label>
+        <input type="date" id="nacimiento" name="nacimiento" required>
+      </div>
+
+      <div class="form-field">
+        <label for="empleado-salariop">Salario por Hora</label>
+        <input type="number" id="empleado-salariop" name="salario" step="0.01" min="0" required>
+      </div>
+
+      <div class="form-field">
+        <label for="descripcionp">Descripción</label>
+        <textarea id="descripcionp" name="descripcionp"></textarea>
+      </div>
+
+      <div class="form-field">
+        <label><input type="checkbox" id="cambiar-contrasena"> Cambiar Contraseña</label>
+        <div id="nueva-contrasena-container" style="display:none;">
+          <label for="nueva-contrasena">Nueva Contraseña</label>
+          <input type="password" id="nueva-contrasena">
+        </div>
+      </div>
+
+      <div class="panel-actions" style="justify-content:space-around;">
+        <button type="submit" class="btn-primary" style="width:50%;">Guardar</button>
+        <button type="button" id="btnCancelarPerfil" class="btn-danger" style="width:50%;">Cancelar</button>
+      </div>
+    </form>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/auth.js"></script>
+
+  <script src="js/models/admin.perfil.model.js"></script>
+  <script src="js/controllers/admin.perfil.controller.js"></script>
+</body>
+</html>

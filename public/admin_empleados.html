@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin — Empleados</title>
+
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/datatables.net-dt@1.13.6/css/jquery.dataTables.min.css">
+  <script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
+</head>
+
+<body data-page="empleados">
+  <nav>
+    <div class="navbar-logo">
+      <a href="dashboard.html">Vértigo</a>
+    </div>
+
+    <button id="menu-toggle" class="menu-toggle" type="button">&#9776;</button>
+
+    <div id="navbar-links" class="navbar-right">
+      <ul id="menu">
+        <li><a href="admin_perfil.html">Perfil</a></li>
+        <li><a href="clientes_vip.html">VIP</a></li>
+        <li><a href="admin_asistencias.html">Asistencias</a></li>
+        <li><a href="admin_jornadas.html">Jornadas</a></li>
+        <li><a href="admin_planilla.html">Planilla</a></li>
+        <li><a href="inventory.html">Inventario</a></li>
+        <li><a href="sales.html">Ventas</a></li>
+        <li><a href="reservas.html">Reservas</a></li>
+        <li><a href="admin_metricas_satisfaccion.html">Encuesta</a></li>
+        <li>
+          <button id="btnDescargarQr" type="button">Generar QR Empresa</button>
+          <div id="qr-container" style="margin-top:10px;"></div>
+        </li>
+        <li>
+          <button id="logout-button" type="button">Cerrar sesión</button>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <div id="empleado-container" class="form-container" style="display:none;">
+    <h2 id="titulo-form-empleado">Agregar Empleado</h2>
+
+    <form id="empleado-form">
+      <div class="form-field">
+        <label for="empleado-nombre">Nombre</label>
+        <input type="text" id="empleado-nombre" name="nombre" required>
+      </div>
+
+      <div class="form-field">
+        <label for="empleado-email">Email</label>
+        <input type="email" id="empleado-email" name="email" required>
+      </div>
+
+      <div class="form-field">
+        <label for="empleado-identificacionNombre">Tipo de Documento</label>
+        <input type="text" id="empleado-identificacionNombre" name="Documento" required>
+      </div>
+
+      <div class="form-field">
+        <label for="empleado-identificacion">Identificación</label>
+        <input type="number" id="empleado-identificacion" name="identificacion" required>
+      </div>
+
+      <div class="form-field">
+        <label for="empleado-isss">Número ISSS</label>
+        <input type="text" id="empleado-isss" name="isss" />
+      </div>
+
+      <div class="form-field">
+        <label for="empleado-afp">Número AFP</label>
+        <input type="text" id="empleado-afp" name="AFP" />
+      </div>
+
+      <div class="form-field">
+        <label for="empleado-salario">Salario por Hora</label>
+        <input type="number" id="empleado-salario" name="salario" step="0.01" min="0" required>
+      </div>
+
+      <div class="form-field">
+        <label for="empleado-nacimiento">Fecha de Nacimiento</label>
+        <input type="date" id="empleado-nacimiento" name="nacimiento" required>
+      </div>
+
+      <div class="form-field">
+        <label for="empleado-direccion">Direccion</label>
+        <input type="text" id="empleado-direccion" name="direccion" required>
+      </div>
+
+      <div class="form-field">
+        <label for="descripcion">Descripción</label>
+        <textarea id="descripcion" name="descripcion"></textarea>
+      </div>
+
+      <div class="form-field">
+        <label for="empleado-jornada">Jornadas</label>
+        <select id="empleado-jornada" name="jornadas" multiple size="4" required></select>
+        <small>Ctrl/Cmd + clic para seleccionar varias jornadas</small>
+      </div>
+
+      <div id="seccion-contraseña" class="form-field">
+        <input type="password" id="register-password" name="register-password" placeholder="Contraseña" />
+        <input type="password" id="register-password2" name="register-password2" placeholder="Confirmar Contraseña" />
+      </div>
+
+      <div id="cambiar-contrasena-empleado-container" style="display:none;">
+        <label>
+          <input type="checkbox" id="cambiar-contrasena-empleado"> Cambiar Contraseña
+        </label>
+        <div id="nueva-contrasena-empleado-container" style="display:none;">
+          <label for="nueva-contrasena-empleado">Nueva Contraseña</label>
+          <input type="password" id="nueva-contrasena-empleado" />
+        </div>
+      </div>
+
+      <div class="panel-actions" style="justify-content:space-around;">
+        <button type="submit" class="btn-primary" style="width:50%;">Guardar Empleado</button>
+        <button type="button" class="btn-danger" style="width:50%;" id="btn-cancelar-empleado">Cancelar</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="tabla-empleados" class="tabla-container">
+    <h2>Gestión de Empleados</h2>
+    <button id="btn-agregar-empleado" class="btn-primary" type="button">Agregar Empleado</button>
+
+    <table id="empleadosTable" class="display nowrap table" style="width:100%">
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Email</th>
+          <th>Teléfono</th>
+          <th>Identificación</th>
+          <th>Dirección</th>
+          <th>Tipo de Documento</th>
+          <th>Nacimiento</th>
+          <th>AFP</th>
+          <th>ISSS</th>
+          <th>Salario/H</th>
+          <th>Sucursal</th>
+          <th>Rol</th>
+          <th>Creado</th>
+          <th>Actualizado</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bcryptjs/2.2.0/bcrypt.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/js-cookie/3.0.5/js.cookie.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/datatables.net@1.13.6/js/jquery.dataTables.min.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/auth.js"></script>
+
+  <script src="js/models/Empleado.model.js"></script>
+  <script src="js/controllers/Empleado.controller.js"></script>
+</body>
+
+</html>
