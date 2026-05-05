@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin — Asistencias</title>
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/datatables.net-dt@1.13.6/css/jquery.dataTables.min.css">
+  <script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
+</head>
+
+<body data-page="asistencias">
+  <nav>
+    <div class="navbar-logo">
+      <a href="dashboard.html">Vértigo</a>
+    </div>
+
+    <button id="menu-toggle" class="menu-toggle" type="button">&#9776;</button>
+
+    <div id="navbar-links" class="navbar-right">
+      <ul id="menu">
+        <li><a href="admin_perfil.html">Perfil</a></li>
+        <li><a href="admin_empleados.html">Empleados</a></li>
+        <li><a href="clientes_vip.html">VIP</a></li>
+        <li><a href="admin_jornadas.html">Jornadas</a></li>
+        <li><a href="admin_planilla.html">Planilla</a></li>
+        <li><a href="inventory.html">Inventario</a></li>
+        <li><a href="sales.html">Ventas</a></li>
+        <li><a href="reservas.html">Reservas</a></li>
+        <li><a href="admin_metricas_satisfaccion.html">Encuesta</a></li>
+        <li>
+          <button id="btnDescargarQr" type="button">Generar QR Empresa</button>
+          <div id="qr-container" style="margin-top:10px;"></div>
+        </li>
+        <li>
+          <button id="logout-button" type="button">Cerrar Sesión</button>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <div id="tabla-asistencias" class="tabla-container">
+    <h2>Control de Asistencias</h2>
+
+    <div id="filtro-fechasa" class="panel-actions" style="margin-bottom:10px;">
+      <div class="form-field">
+        <label for="fechaInicioa">Inicio de Semana:</label>
+        <input type="date" id="fechaInicioa" value="">
+      </div>
+
+      <div class="form-field">
+        <label for="fechaFina">Fin de Semana:</label>
+        <input type="date" id="fechaFina" value="">
+      </div>
+    </div>
+
+    <button id="filtrarA" class="btn-primary" type="button">Filtrar</button>
+
+    <table id="asistenciasTable" class="display nowrap table" style="width:100%">
+      <thead>
+        <tr>
+          <th>Empleado</th>
+          <th>Fecha</th>
+          <th>Escaneo</th>
+          <th>Entrada</th>
+          <th>Salida</th>
+          <th>Justificación</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/datatables.net@1.13.6/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <script src="js/supabase-config.js"></script>
+  <script src="js/auth.js"></script>
+
+  <script src="js/models/admin.asistencias.model.js"></script>
+  <script src="js/controllers/admin.asistencias.controller.js"></script>
+</body>
+</html>

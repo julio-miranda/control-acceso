@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin — Planilla</title>
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/datatables.net-dt@1.13.6/css/jquery.dataTables.min.css">
+  <script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
+</head>
+
+<body data-page="planilla">
+  <nav>
+    <div class="navbar-logo">
+      <a href="dashboard.html">Vértigo</a>
+    </div>
+
+    <button id="menu-toggle" class="menu-toggle" type="button">&#9776;</button>
+
+    <div id="navbar-links" class="navbar-right">
+      <ul id="menu">
+        <li><a href="admin_perfil.html">Perfil</a></li>
+        <li><a href="admin_empleados.html">Empleados</a></li>
+        <li><a href="clientes_vip.html">VIP</a></li>
+        <li><a href="admin_asistencias.html">Asistencias</a></li>
+        <li><a href="admin_jornadas.html">Jornadas</a></li>
+        <li><a href="inventory.html">Inventario</a></li>
+        <li><a href="sales.html">Ventas</a></li>
+        <li><a href="reservas.html">Reservas</a></li>
+        <li><a href="admin_metricas_satisfaccion.html">Encuesta</a></li>
+        <li>
+          <button id="btnDescargarQr" type="button">Generar QR Empresa</button>
+          <div id="qr-container" style="margin-top:10px;"></div>
+        </li>
+        <li>
+          <button id="logout-button" type="button">Cerrar Sesión</button>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <div id="planilla-container" class="planilla-container">
+    <h2>Planilla Semanal</h2>
+
+    <div id="filtro-fechas" class="panel-actions" style="margin-bottom:1rem;">
+      <div class="form-field">
+        <label for="fechaInicio">Inicio de Semana:</label>
+        <input type="date" id="fechaInicio" value="">
+      </div>
+
+      <div class="form-field">
+        <label for="fechaFin">Fin de Semana:</label>
+        <input type="date" id="fechaFin" value="">
+      </div>
+
+      <div class="form-field">
+        <label>
+          <input type="checkbox" id="aplicar-nocturno" />
+          Aplicar recargo 50% horas nocturnas
+        </label>
+      </div>
+    </div>
+
+    <div class="panel-actions">
+      <button id="filtrar" class="btn-primary" type="button">Filtrar</button>
+      <button class="imprimir-btn" onclick="imprimirPlanilla()" type="button">Imprimir Planilla</button>
+      <button class="btn-outline" onclick="descargarExcel()" type="button">Descargar Excel</button>
+    </div>
+
+    <div class="table-responsive">
+      <table id="planillaTable" class="display nowrap table" style="width:100%;margin-top:20px;">
+        <thead>
+          <tr>
+            <th>Empleado</th>
+            <th>Horas Normales</th>
+            <th>Horas Extras</th>
+            <th>Total Horas</th>
+            <th>Total Bruto</th>
+            <th>ISSS</th>
+            <th>AFP</th>
+            <th>Total Neto</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/datatables.net@1.13.6/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+  <script src="js/supabase-config.js"></script>
+  <script src="js/auth.js"></script>
+
+  <script src="js/models/admin.planilla.model.js"></script>
+  <script src="js/controllers/admin.planilla.controller.js"></script>
+</body>
+</html>
