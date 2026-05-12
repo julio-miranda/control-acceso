@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin — Métricas de Satisfacción</title>
+  <link rel="stylesheet" href="css/app.css">
+  <script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs/qrcode.min.js"></script>
+  <style>
+    .metricas-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin-top: 15px;
+      margin-bottom: 20px;
+    }
+
+    .metrica-card {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 15px;
+      text-align: center;
+      box-shadow: var(--shadow);
+    }
+
+    .metrica-card h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      color: var(--muted);
+    }
+
+    .metrica-card .valor {
+      font-size: 28px;
+      font-weight: bold;
+      color: var(--primary);
+    }
+
+    .resumen-general {
+      margin-top: 10px;
+      margin-bottom: 10px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body data-page="admin-metricas-satisfaccion">
+  <nav>
+    <div class="navbar-logo">
+      <a href="dashboard.html">Vértigo</a>
+    </div>
+
+    <button id="menu-toggle" class="menu-toggle" type="button">&#9776;</button>
+
+    <div id="navbar-links" class="navbar-right">
+      <ul id="menu">
+        <li><a href="admin_perfil.html">Perfil</a></li>
+        <li><a href="admin_empleados.html">Empleados</a></li>
+        <li><a href="clientes_vip.html">VIP</a></li>
+        <li><a href="admin_asistencias.html">Asistencias</a></li>
+        <li><a href="admin_jornadas.html">Jornadas</a></li>
+        <li><a href="admin_planilla.html">Planilla</a></li>
+        <li><a href="inventory.html">Inventario</a></li>
+        <li><a href="sales.html">Ventas</a></li>
+        <li><a href="reservas.html">Reservas</a></li>
+        <li>
+          <button id="btnDescargarQr" type="button">Generar QR Encuesta</button>
+          <div id="qr-container" style="margin-top:10px;"></div>
+        </li>
+        <li>
+          <button id="logout-button" type="button">Cerrar Sesión</button>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="container form-container">
+    <h2>Métricas de Satisfacción del Cliente</h2>
+    <p>Reporte básico de la encuesta anónima de Vértigo.</p>
+
+    <div id="filtro-fechas" class="panel-actions">
+      <div class="form-field">
+        <label for="fechaInicio">Fecha inicio</label>
+        <input type="date" id="fechaInicio">
+      </div>
+
+      <div class="form-field">
+        <label for="fechaFin">Fecha fin</label>
+        <input type="date" id="fechaFin">
+      </div>
+
+      <div class="form-field" style="align-self:end;">
+        <button id="btnFiltrarMetricas" class="btn-primary" type="button">Filtrar</button>
+      </div>
+    </div>
+
+    <p id="resumen-general" class="resumen-general"></p>
+
+    <div id="metricas-grid" class="metricas-grid"></div>
+  </div>
+
+  <div class="container tabla-container">
+    <h3>Promedios por indicador</h3>
+    <div class="table-responsive">
+      <table id="tabla-promedios" class="table">
+        <thead>
+          <tr>
+            <th>Indicador</th>
+            <th>Promedio</th>
+            <th>Lectura</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="container tabla-container">
+    <h3>Comentarios recientes</h3>
+    <div class="table-responsive">
+      <table id="tabla-comentarios" class="table">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Comentario</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/models/satisfaccion.model.js"></script>
+  <script src="js/controllers/satisfaccion.controller.js"></script>
+</body>
+</html>

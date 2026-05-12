@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reservas</title>
+
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+  <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+</head>
+
+<body data-page="reservas">
+  <nav>
+    <div class="navbar-logo">
+      <a href="dashboard.html">Vértigo</a>
+    </div>
+
+    <button id="menu-toggle" class="menu-toggle" aria-label="Abrir menú" type="button">&#9776;</button>
+
+    <div id="navbar-links" class="navbar-right">
+      <ul id="menu">
+        <li><a href="admin_perfil.html">Perfil</a></li>
+        <li><a href="admin_empleados.html">Empleados</a></li>
+        <li><a href="clientes_vip.html">VIP</a></li>
+        <li><a href="admin_asistencias.html">Asistencias</a></li>
+        <li><a href="admin_jornadas.html">Jornadas</a></li>
+        <li><a href="inventory.html">Inventario</a></li>
+        <li><a href="sales.html">Ventas</a></li>
+        <li><a href="admin_metricas_satisfaccion.html">Encuesta</a></li>
+        <li><a href="admin_planilla.html">Planilla</a></li>
+        <li>
+          <button id="btnDescargarQr" type="button">Generar QR Empresa</button>
+          <div id="qr-container" style="margin-top:10px;"></div>
+        </li>
+        <li>
+          <button id="logout-button" type="button">Cerrar Sesión</button>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <main class="dashboard" role="main">
+    <section class="stats-container">
+      <div class="stat-card">
+        <h3>Eventos activos</h3>
+        <p id="statEvents">0</p>
+      </div>
+
+      <div class="stat-card">
+        <h3>Reservas pendientes</h3>
+        <p id="statPending">0</p>
+      </div>
+
+      <div class="stat-card">
+        <h3>Reservas confirmadas</h3>
+        <p id="statConfirmed">0</p>
+      </div>
+
+      <div class="stat-card">
+        <h3>Mesas disponibles</h3>
+        <p id="statAvailableTables">0</p>
+      </div>
+    </section>
+
+    <section class="table-container section-spacing">
+      <div class="section-header">
+        <div>
+          <h3>Tipos de eventos disponibles</h3>
+          <p>Opciones válidas para programar eventos y reservas.</p>
+        </div>
+      </div>
+      <div id="eventTypesGrid" class="stats-container"></div>
+    </section>
+
+    <section class="table-container section-spacing">
+      <h3>Crear reserva</h3>
+
+      <form id="reservationForm">
+        <div class="sales-toolbar" style="flex-wrap:wrap;">
+          <div class="product-select-wrapper">
+            <label for="reservationMode">Tipo de reserva</label>
+            <select id="reservationMode">
+              <option value="evento">Reserva para evento</option>
+              <option value="mesa">Reserva con mesa</option>
+            </select>
+          </div>
+
+          <div class="product-select-wrapper">
+            <label for="eventSelect">Evento</label>
+            <select id="eventSelect"></select>
+          </div>
+
+          <div class="product-select-wrapper" id="mesaWrapper">
+            <label for="mesaSelect">Mesa</label>
+            <select id="mesaSelect"></select>
+          </div>
+
+          <div class="product-select-wrapper">
+            <label for="vipSelect">Cliente VIP (opcional)</label>
+            <select id="vipSelect"></select>
+          </div>
+
+          <div class="qty-wrapper">
+            <label for="peopleCount">Personas</label>
+            <input id="peopleCount" type="number" min="1" value="1">
+          </div>
+
+          <div class="qty-wrapper">
+            <label for="reservationAmount">Monto</label>
+            <input id="reservationAmount" type="number" min="0" step="0.01" value="0">
+          </div>
+
+          <div class="qty-wrapper" id="autoTableWrapper">
+            <label for="useAutoTable">Asignación</label>
+            <select id="useAutoTable">
+              <option value="1">Automática</option>
+              <option value="0">Elegir mesa</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="sales-toolbar" style="margin-top:10px;">
+          <div class="product-select-wrapper">
+            <label for="clientName">Nombre del cliente</label>
+            <input id="clientName" type="text" placeholder="Nombre del cliente">
+          </div>
+
+          <div class="product-select-wrapper">
+            <label for="clientPhone">Teléfono</label>
+            <input id="clientPhone" type="text" placeholder="Teléfono">
+          </div>
+
+          <div class="product-select-wrapper">
+            <label for="clientEmail">Correo electrónico</label>
+            <input id="clientEmail" type="email" placeholder="Correo electrónico">
+          </div>
+
+          <div class="product-select-wrapper">
+            <label for="clientIdentification">Identificación</label>
+            <input id="clientIdentification" type="text" placeholder="DUI / NIT / Pasaporte">
+          </div>
+        </div>
+
+        <div style="margin-top:10px;">
+          <label for="clientAddress">Dirección</label>
+          <textarea id="clientAddress" rows="2" placeholder="Dirección del cliente"></textarea>
+        </div>
+
+        <div style="margin-top:10px;">
+          <label for="reservationNote">Observación</label>
+          <textarea id="reservationNote" rows="3"></textarea>
+        </div>
+
+        <div class="panel-actions" style="margin-top:10px;">
+          <button id="btnCreateReservation" class="btn-primary" type="submit">Guardar reserva</button>
+          <button id="btnClearReservationForm" class="btn-outline" type="button">Limpiar</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="table-container section-spacing">
+      <h3>Agregar mesa</h3>
+
+      <form id="mesaForm">
+        <div class="sales-toolbar" style="flex-wrap:wrap;">
+          <div class="product-select-wrapper">
+            <label for="mesaNumero">Número de mesa</label>
+            <input id="mesaNumero" type="text" placeholder="Ej. 1, 2, VIP-A">
+          </div>
+
+          <div class="qty-wrapper">
+            <label for="mesaCapacidad">Capacidad</label>
+            <input id="mesaCapacidad" type="number" min="1" value="4">
+          </div>
+
+          <div class="product-select-wrapper">
+            <label for="mesaEstado">Estado</label>
+            <select id="mesaEstado">
+              <option value="disponible">Disponible</option>
+              <option value="reservada">Reservada</option>
+              <option value="ocupada">Ocupada</option>
+              <option value="mantenimiento">Mantenimiento</option>
+            </select>
+          </div>
+
+          <div class="product-select-wrapper" style="flex:2; min-width:260px;">
+            <label for="mesaDescripcion">Descripción</label>
+            <input id="mesaDescripcion" type="text" placeholder="Observaciones de la mesa">
+          </div>
+        </div>
+
+        <div class="panel-actions" style="margin-top:10px;">
+          <button id="btnCreateMesa" class="btn-primary" type="submit">Guardar mesa</button>
+          <button id="btnClearMesa" class="btn-outline" type="button">Limpiar</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="table-container section-spacing">
+      <div class="section-header">
+        <h3>Eventos disponibles</h3>
+        <div class="table-toolbar" style="margin:0; width:320px; max-width:100%;">
+          <input id="eventSearch" type="text" placeholder="Buscar evento...">
+        </div>
+      </div>
+
+      <table id="eventsTable" class="table">
+        <thead>
+          <tr>
+            <th>Evento</th>
+            <th>Tipo</th>
+            <th>Fecha</th>
+            <th>Capacidad</th>
+            <th>Precio</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="table-container section-spacing">
+      <div class="section-header">
+        <h3>Mesas registradas</h3>
+        <div class="table-toolbar" style="margin:0; width:320px; max-width:100%;">
+          <input id="tableSearch" type="text" placeholder="Buscar mesa...">
+        </div>
+      </div>
+
+      <table id="tablesTable" class="table">
+        <thead>
+          <tr>
+            <th>Mesa</th>
+            <th>Capacidad</th>
+            <th>Estado</th>
+            <th>Descripción</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section class="table-container">
+      <div class="section-header">
+        <h3>Reservas recientes</h3>
+        <div class="panel-actions">
+          <button id="btnRefreshVip" type="button" class="btn-outline">Actualizar VIP</button>
+          <button id="btnRefreshReservations" type="button" class="btn-outline">Actualizar reservas</button>
+        </div>
+        <div class="table-toolbar" style="margin:0; width:320px; max-width:100%;">
+          <input id="reservationSearch" type="text" placeholder="Buscar reserva...">
+        </div>
+      </div>
+
+      <table id="reservationsTable" class="table">
+        <thead>
+          <tr>
+            <th>Evento</th>
+            <th>Cliente</th>
+            <th>Mesa</th>
+            <th>Personas</th>
+            <th>Monto</th>
+            <th>Estado</th>
+            <th>Fecha</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+  <script src="js/auth.js"></script>
+  <script src="js/models/reservas.model.js"></script>
+  <script src="js/controllers/reservas.controller.js"></script>
+</body>
+</html>

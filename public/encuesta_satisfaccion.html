@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Vértigo — Encuesta de Satisfacción</title>
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body data-page="encuesta-satisfaccion">
+
+    <div class="container form-container">
+        <h2>Encuesta de Satisfacción — Vértigo</h2>
+        <p>Tu opinión es anónima. No pedimos nombre, correo ni ningún dato personal.</p>
+
+        <form id="encuesta-form">
+            <label for="ambiente">¿Cómo calificas el ambiente general?</label>
+            <select id="ambiente" name="ambiente" required>
+                <option value="">Selecciona una opción</option>
+                <option value="5">5 - Excelente</option>
+                <option value="4">4 - Bueno</option>
+                <option value="3">3 - Regular</option>
+                <option value="2">2 - Malo</option>
+                <option value="1">1 - Muy malo</option>
+            </select>
+
+            <label for="musica">¿Cómo calificas la música o selección del DJ?</label>
+            <select id="musica" name="musica" required>
+                <option value="">Selecciona una opción</option>
+                <option value="5">5 - Excelente</option>
+                <option value="4">4 - Bueno</option>
+                <option value="3">3 - Regular</option>
+                <option value="2">2 - Malo</option>
+                <option value="1">1 - Muy malo</option>
+            </select>
+
+            <label for="atencion">¿Cómo calificas la atención del personal?</label>
+            <select id="atencion" name="atencion" required>
+                <option value="">Selecciona una opción</option>
+                <option value="5">5 - Excelente</option>
+                <option value="4">4 - Bueno</option>
+                <option value="3">3 - Regular</option>
+                <option value="2">2 - Malo</option>
+                <option value="1">1 - Muy malo</option>
+            </select>
+
+            <label for="seguridad">¿Cómo calificas la seguridad del lugar?</label>
+            <select id="seguridad" name="seguridad" required>
+                <option value="">Selecciona una opción</option>
+                <option value="5">5 - Excelente</option>
+                <option value="4">4 - Bueno</option>
+                <option value="3">3 - Regular</option>
+                <option value="2">2 - Malo</option>
+                <option value="1">1 - Muy malo</option>
+            </select>
+
+            <label for="limpieza">¿Cómo calificas la limpieza del establecimiento?</label>
+            <select id="limpieza" name="limpieza" required>
+                <option value="">Selecciona una opción</option>
+                <option value="5">5 - Excelente</option>
+                <option value="4">4 - Bueno</option>
+                <option value="3">3 - Regular</option>
+                <option value="2">2 - Malo</option>
+                <option value="1">1 - Muy malo</option>
+            </select>
+
+            <label for="tiempo_espera">¿Cómo calificas el tiempo de espera para ser atendido?</label>
+            <select id="tiempo_espera" name="tiempo_espera" required>
+                <option value="">Selecciona una opción</option>
+                <option value="5">5 - Excelente</option>
+                <option value="4">4 - Bueno</option>
+                <option value="3">3 - Regular</option>
+                <option value="2">2 - Malo</option>
+                <option value="1">1 - Muy malo</option>
+            </select>
+
+            <label for="recomendacion">¿Qué tan probable es que recomiendes Vértigo?</label>
+            <select id="recomendacion" name="recomendacion" required>
+                <option value="">Selecciona una opción</option>
+                <option value="5">5 - Excelente</option>
+                <option value="4">4 - Bueno</option>
+                <option value="3">3 - Regular</option>
+                <option value="2">2 - Malo</option>
+                <option value="1">1 - Muy malo</option>
+            </select>
+
+            <label for="comentario">Comentario opcional</label>
+            <textarea id="comentario" name="comentario" rows="4" placeholder="Escribe aquí cualquier sugerencia o comentario"></textarea>
+
+            <input type="hidden" id="canal" name="canal" value="qr">
+
+            <button type="submit">Enviar encuesta</button>
+        </form>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/supabase-config.js"></script>
+    <script src="js/models/satisfaccion.model.js"></script>
+    <script src="js/controllers/satisfaccion.controller.js"></script>
+</body>
+</html>

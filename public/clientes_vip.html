@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin — Clientes VIP</title>
+
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/datatables.net-dt@1.13.6/css/jquery.dataTables.min.css">
+</head>
+
+<body data-page="clientes-vip">
+  <nav>
+    <div class="navbar-logo">
+      <a href="dashboard.html">Vértigo</a>
+    </div>
+
+    <button id="menu-toggle" class="menu-toggle" type="button">&#9776;</button>
+
+    <div id="navbar-links" class="navbar-right">
+      <ul id="menu">
+        <li><a href="admin_perfil.html">Perfil</a></li>
+        <li><a href="admin_empleados.html">Empleados</a></li>
+        <li><a href="admin_asistencias.html">Asistencias</a></li>
+        <li><a href="admin_jornadas.html">Jornadas</a></li>
+        <li><a href="admin_planilla.html">Planilla</a></li>
+        <li><a href="inventory.html">Inventario</a></li>
+        <li><a href="sales.html">Ventas</a></li>
+        <li><a href="reservas.html">Reservas</a></li>
+        <li><a href="admin_metricas_satisfaccion.html">Encuesta</a></li>
+        <li>
+          <button id="btnDescargarQr" type="button">Generar QR Encuesta</button>
+          <div id="qr-container" style="margin-top:10px;"></div>
+        </li>
+        <li>
+          <button id="logout-button" type="button">Cerrar Sesión</button>
+        </li>
+      </ul>
+    </div>
+  </nav>
+
+  <main class="dashboard">
+    <section class="dashboard-hero">
+      <div>
+        <h1>Gestión de clientes VIP</h1>
+        <p class="hero-subtitle">Registra, edita, activa o inactiva clientes VIP de forma rápida y ordenada.</p>
+      </div>
+    </section>
+
+    <section class="stats-container">
+      <div class="stat-card">
+        <h3>Total VIP</h3>
+        <p id="stat-total-vip">0</p>
+      </div>
+
+      <div class="stat-card">
+        <h3>Activos</h3>
+        <p id="stat-activos-vip">0</p>
+      </div>
+
+      <div class="stat-card">
+        <h3>Inactivos</h3>
+        <p id="stat-inactivos-vip">0</p>
+      </div>
+    </section>
+
+    <section id="cliente-vip-container" class="panel-card form-container" style="display:none;">
+      <div class="section-header compact">
+        <div>
+          <h2 id="titulo-form-cliente-vip">Agregar Cliente VIP</h2>
+          <p>Complete los datos básicos del cliente.</p>
+        </div>
+      </div>
+
+      <form id="cliente-vip-form">
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="cliente-vip-nombre">Nombre</label>
+            <input type="text" id="cliente-vip-nombre" name="nombre" required maxlength="100">
+          </div>
+
+          <div class="form-field">
+            <label for="cliente-vip-telefono">Teléfono</label>
+            <input type="text" id="cliente-vip-telefono" name="telefono" maxlength="50">
+          </div>
+
+          <div class="form-field">
+            <label for="cliente-vip-email">Email</label>
+            <input type="email" id="cliente-vip-email" name="email" maxlength="255">
+          </div>
+
+          <div class="form-field">
+            <label for="cliente-vip-identificacion">Identificación</label>
+            <input type="text" id="cliente-vip-identificacion" name="identificacion" maxlength="20">
+          </div>
+
+          <div class="form-field">
+            <label for="cliente-vip-fecha-alta">Fecha alta</label>
+            <input type="date" id="cliente-vip-fecha-alta" name="fecha_alta" readonly>
+          </div>
+
+          <div class="form-field form-field-full">
+            <label for="cliente-vip-direccion">Dirección</label>
+            <textarea id="cliente-vip-direccion" name="direccion" rows="3"></textarea>
+          </div>
+
+          <div class="form-field form-field-full">
+            <label for="cliente-vip-notas">Notas</label>
+            <textarea id="cliente-vip-notas" name="notas" rows="3"></textarea>
+          </div>
+
+          <div class="form-field">
+            <label class="checkbox-label">
+              <input type="checkbox" id="cliente-vip-activo" name="activo" checked>
+              Activo
+            </label>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Guardar Cliente VIP</button>
+          <button type="button" id="btn-cancelar-cliente-vip" class="btn btn-outline">Cancelar</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="tabla-clientes-vip" class="table-section">
+      <div class="section-header">
+        <div>
+          <h2>Clientes VIP</h2>
+          <p>Lista completa con estado y acciones rápidas.</p>
+        </div>
+
+        <div class="panel-actions">
+          <button id="btn-agregar-cliente-vip" type="button" class="btn btn-primary">Agregar Cliente VIP</button>
+        </div>
+      </div>
+
+      <div class="table-toolbar">
+        <input type="text" id="vipSearch" placeholder="Buscar cliente VIP...">
+      </div>
+
+      <div class="table-container">
+        <table id="clientesVipTable" class="display nowrap table" style="width:100%">
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Sucursal</th>
+              <th>Teléfono</th>
+              <th>Email</th>
+              <th>Identificación</th>
+              <th>Fecha Alta</th>
+              <th>Estado</th>
+              <th>Notas</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bcryptjs/2.2.0/bcrypt.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/js-cookie/3.0.5/js.cookie.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/datatables.net@1.13.6/js/jquery.dataTables.min.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/auth.js"></script>
+
+  <script src="js/models/ClienteVip.model.js"></script>
+  <script src="js/controllers/ClienteVip.controller.js"></script>
+</body>
+</html>
