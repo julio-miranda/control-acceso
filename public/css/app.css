@@ -1,0 +1,1069 @@
+/* css/app.css */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap');
+
+:root {
+  --bg: #f3f6f9;
+  --surface: #fff;
+  --surface-2: #f8fafc;
+  --text: #111827;
+  --muted: #6b7280;
+  --border: #e6e9ee;
+
+  --primary: #007bff;
+  --primary-hover: #0b6bdf;
+  --success: #16a34a;
+  --success-hover: #15803d;
+  --danger: #ef4444;
+  --danger-hover: #dc2626;
+  --warning: #f59e0b;
+  --purple: #8b5cf6;
+
+  --shadow: 0 6px 18px rgba(14, 30, 37, .06);
+  --shadow-md: 0 8px 24px rgba(15, 23, 42, .08);
+  --radius: 10px;
+  --radius-sm: 8px;
+  --nav-height: 72px;
+  --max-width: 1200px;
+
+  box-sizing: border-box;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: inherit;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Poppins", sans-serif;
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+/* ---------- LAYOUT GENERAL ---------- */
+.dashboard {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.container,
+.form-container,
+.tabla-container,
+.planilla-container,
+.table-container,
+.dataTables_wrapper,
+.panel-card,
+.chart-card,
+.hero-note,
+.info-card,
+.report-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.form-container,
+.tabla-container,
+.planilla-container,
+.table-container,
+.dataTables_wrapper {
+  margin: 10px;
+}
+
+.panel-card,
+.chart-card,
+.table-container,
+.form-container,
+.tabla-container,
+.planilla-container {
+  padding: 14px;
+}
+
+/* ---------- NAVBAR ---------- */
+nav,
+.navbar {
+  width: 100%;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 24px;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .06);
+}
+
+.navbar-logo {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.navbar-logo a {
+  color: #fff;
+  font-weight: 800;
+  font-size: 1.05rem;
+  letter-spacing: .2px;
+}
+
+#navbar-links,
+.navbar-right {
+  width: 100%;
+}
+
+#navbar-links ul,
+.navbar-links ul,
+nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+#navbar-links li,
+.navbar-links li,
+nav ul li {
+  margin: 0;
+}
+
+#navbar-links a,
+.navbar-links a,
+nav ul li a {
+  color: #fff;
+  font-weight: 700;
+  padding: 10px 14px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .2s ease, transform .15s ease;
+}
+
+#navbar-links a:hover,
+.navbar-links a:hover,
+nav ul li a:hover {
+  background: rgba(255, 255, 255, .10);
+  transform: translateY(-1px);
+}
+
+#navbar-links a.active,
+.navbar-links a.active {
+  background: rgba(255, 255, 255, .14);
+}
+
+#menu-toggle,
+.menu-toggle {
+  display: none;
+  font-size: 24px;
+  background: none;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  line-height: 1;
+}
+
+/* ---------- BOTONES ---------- */
+button,
+.btn,
+.btn-primary,
+.btn-outline,
+.imprimir-btn,
+.action-btn,
+.btn-add-row,
+.btn-remove-row,
+.logoutButton,
+#logout-button,
+#btnDescargarQr {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  padding: 9px 14px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform .15s ease, background .2s ease, opacity .15s ease;
+  user-select: none;
+}
+
+button:hover,
+.btn:hover,
+.imprimir-btn:hover,
+.action-btn:hover,
+.btn-add-row:hover,
+.btn-remove-row:hover,
+.logoutButton:hover,
+#logout-button:hover,
+#btnDescargarQr:hover {
+  transform: translateY(-1px);
+}
+
+.btn-primary,
+#btnAdd,
+#btnAddReceta,
+#btnCreateReservation,
+#btnCreateMesa,
+#btnFinalize,
+#btnSaveDraft,
+#btnAddToCart,
+#btnAddCombo,
+#btn-agregar-empleado,
+#btnFiltrarMetricas,
+#filtrar,
+#filtrarA {
+  background: var(--primary);
+  color: #fff;
+}
+
+.btn-primary:hover,
+#btnAdd:hover,
+#btnAddReceta:hover,
+#btnCreateReservation:hover,
+#btnCreateMesa:hover,
+#btnFinalize:hover,
+#btnSaveDraft:hover,
+#btnAddToCart:hover,
+#btnAddCombo:hover,
+#btn-agregar-empleado:hover,
+#btnFiltrarMetricas:hover,
+#filtrar:hover,
+#filtrarA:hover {
+  background: var(--primary-hover);
+}
+
+.btn-outline,
+.secondary-btn {
+  background: #fff;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-outline:hover,
+.secondary-btn:hover {
+  background: #f8fafc;
+}
+
+.imprimir-btn,
+#btnDescargarQr,
+.btn-success {
+  background: var(--success);
+  color: #fff;
+}
+
+.imprimir-btn:hover,
+#btnDescargarQr:hover,
+.btn-success:hover {
+  background: var(--success-hover);
+}
+
+#logout-button,
+.logoutButton,
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+#logout-button:hover,
+.logoutButton:hover,
+.btn-danger:hover {
+  background: var(--danger-hover);
+}
+
+.btn-edit {
+  background: #3b82f6;
+  color: #fff;
+}
+
+.btn-delete {
+  background: #ef4444;
+  color: #fff;
+}
+
+.btn-mov {
+  background: #10b981;
+  color: #fff;
+}
+
+.btn-recipe {
+  background: #8b5cf6;
+  color: #fff;
+}
+
+/* ---------- TEXTOS / TITULOS ---------- */
+.section-header,
+.dashboard-hero,
+.table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.section-header h2,
+.section-header h3,
+.dashboard-hero h1 {
+  margin: 0 0 6px;
+}
+
+.section-header p,
+.hero-subtitle,
+.empty-state,
+.loading,
+.no-alerts,
+.swal2-html-container {
+  color: var(--muted);
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+  font-size: .82rem;
+  font-weight: 700;
+}
+
+/* ---------- INPUTS ---------- */
+input,
+select,
+textarea,
+#salesSearch,
+#vipSearch,
+#eventSearch,
+#tableSearch,
+#reservationSearch {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d8e0ea;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  outline: none;
+  transition: border-color .2s ease, box-shadow .2s ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+#salesSearch:focus,
+#vipSearch:focus,
+#eventSearch:focus,
+#tableSearch:focus,
+#reservationSearch:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, .12);
+}
+
+label {
+  display: inline-block;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 4px;
+}
+
+textarea {
+  resize: vertical;
+}
+
+/* ---------- FORMULARIOS / TOOLBARS ---------- */
+.sales-toolbar,
+.form-grid,
+.table-toolbar,
+.stats-container,
+.dashboard-hero,
+.panel-actions,
+.controls-actions,
+.cart-summary-actions,
+.actions-cell {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sales-toolbar {
+  align-items: flex-end;
+  margin-bottom: 10px;
+}
+
+.product-select-wrapper,
+.qty-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.product-select-wrapper {
+  flex: 1;
+  min-width: 250px;
+}
+
+.qty-wrapper {
+  width: 120px;
+}
+
+.qty-wrapper input,
+.qty-wrapper select {
+  height: 42px;
+}
+
+.sales-toolbar button {
+  height: 42px;
+}
+
+/* ---------- TARJETAS ---------- */
+.stats-container {
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  flex: 1;
+  min-width: 220px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--shadow);
+}
+
+.stat-card h3 {
+  margin: 0;
+  font-size: .9rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.stat-card p {
+  margin: 8px 0 0;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.hero-note,
+.info-card,
+.report-card {
+  padding: 16px 18px;
+}
+
+/* ---------- TABLAS ---------- */
+
+/* El contenedor NO debe manejar scroll */
+.table-container {
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+  border-radius: var(--radius);
+}
+
+/*
+  El scroll pertenece a la tabla.
+  display:block permite overflow real.
+*/
+.table,
+table,
+table.dataTable {
+  display: block;
+  width: max-content !important;
+  min-width: 100% !important;
+
+  overflow-x: auto;
+  overflow-y: auto;
+
+  max-width: 100%;
+  max-height: 70vh;
+
+  border-collapse: collapse;
+  table-layout: auto !important;
+
+  background: #fff;
+
+  scrollbar-gutter: stable;
+}
+
+/* Estructura interna */
+table.dataTable thead,
+table.dataTable tbody,
+table.dataTable tr {
+  width: 100%;
+}
+
+/* Celdas */
+table.dataTable th,
+table.dataTable td,
+.table th,
+.table td {
+  box-sizing: border-box;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+/* Encabezados */
+.table thead th,
+table.dataTable thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+
+  background: var(--primary);
+  color: #fff;
+
+  padding: 12px 10px;
+
+  text-align: center;
+  font-weight: 700;
+
+  border-top: 0 !important;
+  border-bottom: 0 !important;
+
+  white-space: nowrap;
+  word-break: normal;
+
+  line-height: 1.2;
+
+  box-shadow: none !important;
+  background-image: none !important;
+}
+
+/* Body */
+.table td,
+table.dataTable tbody td {
+  padding: 11px 10px;
+
+  border-bottom: 1px solid #eef2f7;
+
+  text-align: left;
+  vertical-align: middle;
+
+  line-height: 1.25;
+
+  white-space: nowrap;
+
+  background: #fff;
+}
+
+/* Hover */
+table.dataTable tbody tr:hover,
+.table tbody tr:hover {
+  background: #f8fafc;
+}
+
+/* Acciones */
+.table td:last-child,
+table.dataTable td:last-child {
+  white-space: nowrap;
+}
+
+/* ---------- DATATABLES ---------- */
+
+/*
+  Wrapper SIN scroll.
+*/
+.dataTables_wrapper {
+  width: 100%;
+  margin: 10px;
+  padding: 12px;
+
+  overflow: visible !important;
+}
+
+/*
+  Elimina el sistema de scroll interno
+  que rompe alineaciones.
+*/
+.dataTables_scroll,
+.dataTables_scrollHead,
+.dataTables_scrollBody,
+.dataTables_scrollHeadInner {
+  all: unset !important;
+}
+
+/*
+  Fuerza que DataTables use la tabla real.
+*/
+.dataTables_wrapper table.dataTable {
+  display: block;
+
+  width: max-content !important;
+  min-width: 100% !important;
+
+  margin: 0 !important;
+
+  border-spacing: 0;
+}
+
+/* Inputs DataTables */
+.dataTables_wrapper .dataTables_filter,
+.dataTables_wrapper .dataTables_length,
+.dataTables_wrapper .dataTables_info,
+.dataTables_wrapper .dataTables_paginate {
+  margin-top: 12px;
+  margin-bottom: 12px;
+}
+
+.dataTables_wrapper select,
+.dataTables_wrapper input {
+  border: 1px solid #d8e0ea;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+/* Limpieza visual */
+table.dataTable.no-footer,
+table.dataTable {
+  border-top: 0 !important;
+  border-bottom: 0 !important;
+  outline: none !important;
+}
+
+table.dataTable thead th,
+table.dataTable thead td {
+  border-bottom: 0 !important;
+  box-shadow: none !important;
+}
+
+/* ---------- SELECT2 ---------- */
+.select2-container {
+  width: 100% !important;
+}
+
+.select2-container .select2-selection--single {
+  height: 42px !important;
+  border-radius: 8px !important;
+  border: 1px solid #d8e0ea !important;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  background: #fff;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+  color: var(--text) !important;
+  line-height: normal !important;
+  padding-left: 0 !important;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+  height: 100% !important;
+  right: 8px !important;
+}
+
+.select2-dropdown {
+  border-radius: 10px !important;
+  border: 1px solid #d8e0ea !important;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.select2-search__field {
+  padding: 10px !important;
+  border-radius: 6px !important;
+  border: 1px solid #d8e0ea !important;
+  margin: 8px !important;
+  width: calc(100% - 16px) !important;
+}
+
+.select2-results__option {
+  padding: 10px !important;
+  font-size: 14px;
+}
+
+.select2-results__option--highlighted {
+  background: var(--primary) !important;
+  color: #fff !important;
+}
+
+.select2-results__option[aria-selected="true"] {
+  background: #eef2ff;
+  color: var(--text);
+}
+
+.select2-container--default.select2-container--focus .select2-selection--single {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, .15);
+}
+
+/* ---------- BADGES ---------- */
+.badge,
+.badge-active,
+.badge-inactive {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: .8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.badge-active {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge-inactive {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.badge-success {
+  background: rgba(16, 185, 129, .12);
+  color: #059669;
+}
+
+.badge-danger {
+  background: rgba(239, 68, 68, .12);
+  color: #dc2626;
+}
+
+/* ---------- ESTADOS ---------- */
+.low-stock {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+/* ---------- COMPONENTES ESPECIALES ---------- */
+.dashboard-hero {
+  align-items: stretch;
+  margin-bottom: 20px;
+}
+
+.dashboard-hero > div {
+  flex: 1;
+  min-width: 260px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.chart-card {
+  padding: 18px;
+}
+
+.chart-container {
+  position: relative;
+  min-height: 320px;
+  margin-top: 12px;
+}
+
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.event-types-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  width: 100%;
+}
+
+.event-type-card {
+  background: linear-gradient(180deg, #fff 0%, #f8fbff 100%);
+  border: 1px solid #dbe3ee;
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+
+.top-products-list,
+.low-stock-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.low-stock-panel {
+  padding: 14px;
+}
+
+.low-stock-item--rich {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  border: 1px solid #fde68a;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #fff, #fffbeb);
+}
+
+.recipe-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.recipe-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) minmax(90px, .9fr) minmax(90px, .9fr) auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.recipe-row select,
+.recipe-row input {
+  padding: 9px 10px;
+  font-size: .92rem;
+}
+
+.btn-inline {
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: .88rem;
+  line-height: 1;
+}
+
+.movement-history-wrap {
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+}
+
+.movement-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 900px;
+}
+
+.movement-history-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--primary);
+  color: #fff;
+  padding: 12px;
+  text-align: center;
+}
+
+.movement-history-table td {
+  padding: 10px;
+  border-bottom: 1px solid #eef2f7;
+  text-align: center;
+}
+
+/* ---------- SWEETALERT ---------- */
+.swal2-popup {
+  border-radius: 14px !important;
+}
+
+.swal2-title,
+.swal2-html-container {
+  color: var(--text) !important;
+}
+
+.inventory-swal-popup {
+  width: min(92vw, 760px) !important;
+  max-width: 760px !important;
+  padding: 1.2rem !important;
+}
+
+.inventory-swal-form {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inventory-swal-form label {
+  font-weight: 700;
+  color: var(--text);
+  font-size: .92rem;
+  margin-top: 2px;
+  margin-bottom: 0;
+}
+
+.inventory-swal-form input,
+.inventory-swal-form select,
+.inventory-swal-form textarea,
+.inventory-swal-form .swal2-input,
+.inventory-swal-form .swal2-textarea {
+  width: 100% !important;
+  min-width: 0 !important;
+  margin: 0 !important;
+  padding: 10px 12px !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+.inventory-swal-form textarea,
+.inventory-swal-form .swal2-textarea {
+  min-height: 90px !important;
+  resize: vertical;
+}
+
+/* ---------- RESPONSIVE ---------- */
+@media (max-width: 1100px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  nav,
+  .navbar {
+    padding: 15px 16px;
+  }
+
+  #menu-toggle,
+  .menu-toggle {
+    display: block;
+    margin-left: auto;
+  }
+
+  #navbar-links,
+  .navbar-right {
+    display: none;
+    flex-direction: column;
+    width: 100%;
+    text-align: center;
+    background: var(--primary);
+    position: fixed;
+    top: var(--nav-height);
+    left: 0;
+    padding: 12px 0 18px;
+    height: calc(100vh - var(--nav-height));
+    overflow-y: auto;
+    z-index: 9999;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, .12);
+  }
+
+  #navbar-links.active,
+  .navbar-right.menu-open {
+    display: flex;
+  }
+
+  #navbar-links ul,
+  .navbar-links ul,
+  nav ul {
+    flex-direction: column;
+    gap: 0;
+    width: 100%;
+    padding: 0 12px;
+  }
+
+  #navbar-links ul li,
+  .navbar-links ul li,
+  nav ul li {
+    width: 100%;
+  }
+
+  #navbar-links a,
+  .navbar-links a,
+  nav ul li a {
+    display: block;
+    width: 100%;
+    padding: 14px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, .16);
+    border-radius: 0;
+  }
+
+  .dashboard {
+    padding: 14px;
+  }
+
+  .stats-container {
+    gap: 14px;
+  }
+
+  .stat-card {
+    min-width: 100%;
+  }
+
+  .sales-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .product-select-wrapper,
+  .qty-wrapper {
+    width: 100%;
+    min-width: 100%;
+  }
+
+  .sales-toolbar button {
+    width: 100%;
+  }
+
+  .table-container,
+  .panel-card,
+  .chart-card,
+  .form-container,
+  .tabla-container,
+  .planilla-container {
+    padding: 12px;
+  }
+
+  .table,
+  table {
+    min-width: 620px;
+  }
+
+  .recipe-row {
+    grid-template-columns: 1fr;
+  }
+
+  .recipe-row .btn-remove-row {
+    width: 100%;
+  }
+
+  .controls-actions .btn,
+  .controls-actions button {
+    width: 100%;
+    justify-content: center;
+    white-space: normal;
+  }
+
+  .event-types-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-swal-popup {
+    width: min(96vw, 520px) !important;
+    padding: 1rem !important;
+  }
+}
