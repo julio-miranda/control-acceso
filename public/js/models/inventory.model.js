@@ -1,5 +1,5 @@
 // js/models/inventory.model.js
-(function (global) {saveRowById
+(function (global) {
   "use strict";
 
   const supabase = global.supabase;
@@ -815,91 +815,6 @@
     }
   }
 
-  async function linkPreparedProduct(productId, recipeId) {
-    const supabase = getSupabase();
-
-    try {
-      const { data, error } = await supabase
-        .from("productos_preparados")
-        .upsert({ id: productId, receta_id: recipeId }, { onConflict: "id" })
-        .select("*")
-        .maybeSingle();
-
-      if (error) {
-        logError("linkPreparedProduct", error, { productId, recipeId });
-        throw error;
-      }
-
-      return data || { id: productId, receta_id: recipeId };
-    } catch (err) {
-      logError("linkPreparedProduct(catch)", err, { productId, recipeId });
-      throw err;
-    }
-  }
-
-  async function unlinkPreparedProduct(productId) {
-    const supabase = getSupabase();
-
-    try {
-      const { error } = await supabase
-        .from("productos_preparados")
-        .delete()
-        .eq("id", productId);
-
-      if (error) {
-        logError("unlinkPreparedProduct", error, { productId });
-        throw error;
-      }
-
-      return true;
-    } catch (err) {
-      logError("unlinkPreparedProduct(catch)", err, { productId });
-      throw err;
-    }
-  }
-
-  async function upsertInsumoProduct(productId, unidadMedida = "unidad") {
-    const supabase = getSupabase();
-
-    try {
-      const { data, error } = await supabase
-        .from("productos_insumo")
-        .upsert({ id: productId, unidad_medida: unidadMedida }, { onConflict: "id" })
-        .select("*")
-        .maybeSingle();
-
-      if (error) {
-        logError("upsertInsumoProduct", error, { productId, unidadMedida });
-        throw error;
-      }
-
-      return data || { id: productId, unidad_medida: unidadMedida };
-    } catch (err) {
-      logError("upsertInsumoProduct(catch)", err, { productId, unidadMedida });
-      throw err;
-    }
-  }
-
-  async function removeInsumoProduct(productId) {
-    const supabase = getSupabase();
-
-    try {
-      const { error } = await supabase
-        .from("productos_insumo")
-        .delete()
-        .eq("id", productId);
-
-      if (error) {
-        logError("removeInsumoProduct", error, { productId });
-        throw error;
-      }
-
-      return true;
-    } catch (err) {
-      logError("removeInsumoProduct(catch)", err, { productId });
-      throw err;
-    }
-  }
 
   async function getProductById(productId) {
     try {
@@ -1160,6 +1075,174 @@
     }
   }
 
+  async function getRecipeDetails(recipeId) {
+    try {
+      const rows = await fetchTableRows("receta_detalle", "*");
+      return (rows || [])
+        .filter(r => String(r.receta_id || "") === String(recipeId))
+        .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+    } catch (e) {
+      console.error("getRecipeDetails error:", e);
+      return [];
+    }
+  }
+
+  async function subscribeRealtime(onProductsChange, onSalesChange) {
+    if (typeof supabase.channel !== "function") return null;
+
+    try {
+      cleanupRealtime();
+
+      state.productsChannel = supabase
+        .channel("inventory-products-channel")
+        .on("postgres_changes", { event: "*", schema: "public", table: "productos" }, async () => {
+          if (typeof onProductsChange === "function") await onProductsChange();
+        })
+        .subscribe();
+
+      state.salesChannel = supabase
+        .channel("inventory-sales-channel")
+        .on("postgres_changes", { event: "*", schema: "public", table: "ventas" }, async () => {
+          if (typeof onSalesChange === "function") await onSalesChange();
+        })
+        .subscribe();
+
+      return true;
+    } catch (e) {
+      console.warn("Realtime no disponible:", e);
+      return false;
+    }
+  }
+
+  function cleanupRealtime() {
+    try {
+      if (state.productsChannel && typeof supabase.removeChannel === "function") {
+        supabase.removeChannel(state.productsChannel);
+        state.productsChannel = null;
+      }
+      if (state.salesChannel && typeof supabase.removeChannel === "function") {
+        supabase.removeChannel(state.salesChannel);
+        state.salesChannel = null;
+      }
+    } catch (e) {
+      console.warn("cleanupRealtime:", e);
+    }
+  }
+
+    async function saveRowById(table, row, idField = "id") {
+    const supabase = getSupabase();
+    const payload = { ...row };
+    const hasId = payload[idField] !== undefined && payload[idField] !== null && String(payload[idField]).trim() !== "";
+
+    if (!hasId) {
+      delete payload[idField];
+    }
+
+    if (hasId) {
+      const { data: updatedData, error: updateError } = await supabase
+        .from(table)
+        .update(payload)
+        .eq(idField, payload[idField])
+        .select("*")
+        .maybeSingle();
+
+      if (updateError) {
+        logError(`saveRowById.update(${table})`, updateError, { payload });
+      }
+
+      if (updatedData) {
+        return updatedData;
+      }
+    }
+
+    const { data: insertedData, error: insertError } = await supabase
+      .from(table)
+      .insert(payload)
+      .select("*")
+      .maybeSingle();
+
+    if (insertError) {
+      logError(`saveRowById.insert(${table})`, insertError, { payload });
+      throw insertError;
+    }
+
+    return insertedData || payload;
+  }
+
+  async function linkPreparedProduct(productId, recipeId) {
+    try {
+      if (!productId || !recipeId) {
+        throw new Error("productId y recipeId son obligatorios.");
+      }
+
+      return await saveRowById("productos_preparados", {
+        id: productId,
+        receta_id: recipeId
+      });
+    } catch (err) {
+      logError("linkPreparedProduct", err, { productId, recipeId });
+      throw err;
+    }
+  }
+
+  async function unlinkPreparedProduct(productId) {
+    const supabase = getSupabase();
+
+    try {
+      const { error } = await supabase
+        .from("productos_preparados")
+        .delete()
+        .eq("id", productId);
+
+      if (error) {
+        logError("unlinkPreparedProduct", error, { productId });
+        throw error;
+      }
+
+      return true;
+    } catch (err) {
+      logError("unlinkPreparedProduct(catch)", err, { productId });
+      throw err;
+    }
+  }
+
+  async function upsertInsumoProduct(productId, unidadMedida = "unidad") {
+    try {
+      if (!productId) {
+        throw new Error("productId es obligatorio.");
+      }
+
+      return await saveRowById("productos_insumo", {
+        id: productId,
+        unidad_medida: unidadMedida
+      });
+    } catch (err) {
+      logError("upsertInsumoProduct", err, { productId, unidadMedida });
+      throw err;
+    }
+  }
+
+  async function removeInsumoProduct(productId) {
+    const supabase = getSupabase();
+
+    try {
+      const { error } = await supabase
+        .from("productos_insumo")
+        .delete()
+        .eq("id", productId);
+
+      if (error) {
+        logError("removeInsumoProduct", error, { productId });
+        throw error;
+      }
+
+      return true;
+    } catch (err) {
+      logError("removeInsumoProduct(catch)", err, { productId });
+      throw err;
+    }
+  }
+
   async function getRecipeByProductId(productId) {
     try {
       const [links, recipes] = await Promise.all([
@@ -1167,10 +1250,16 @@
         fetchTableRows("recetas", "*")
       ]);
 
-      const link = (links || []).find(l => String(normalizeId(l, "productos_preparados") || "") === String(productId));
+      const link = (links || []).find(
+        l => String(normalizeId(l, "productos_preparados") || "") === String(productId)
+      );
+
       if (!link?.receta_id) return null;
 
-      const recipe = (recipes || []).find(r => String(normalizeId(r, "recetas") || "") === String(link.receta_id));
+      const recipe = (recipes || []).find(
+        r => String(normalizeId(r, "recetas") || "") === String(link.receta_id)
+      );
+
       if (!recipe) return null;
 
       return {
@@ -1184,24 +1273,9 @@
     }
   }
 
-  async function getRecipeDetails(recipeId) {
-    try {
-      const rows = await fetchTableRows("receta_detalle", "*");
-      return (rows || [])
-        .filter(r => String(r.receta_id || "") === String(recipeId))
-        .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
-    } catch (e) {
-      console.error("getRecipeDetails error:", e);
-      return [];
-    }
-  }
-
   async function upsertRecipe(recipe) {
-    const supabase = getSupabase();
-
     try {
       const payload = {
-        id: recipe.id || undefined,
         sucursal_id: recipe.sucursal_id ?? state.context?.sucursalId ?? global.adminSucursal ?? null,
         nombre: recipe.nombre,
         descripcion: recipe.descripcion || null,
@@ -1209,19 +1283,17 @@
         activa: recipe.activa !== false
       };
 
-      const { data, error } = await supabase
-        .from("recetas")
-        .upsert(payload, { onConflict: "id" })
-        .select("*")
-        .maybeSingle();
-
-      if (error) throw error;
-
-      if (recipe.producto_id) {
-        await linkPreparedProduct(recipe.producto_id, data?.id || recipe.id);
+      if (recipe.id) {
+        payload.id = recipe.id;
       }
 
-      return data || payload;
+      const saved = await saveRowById("recetas", payload, "id");
+
+      if (recipe.producto_id) {
+        await linkPreparedProduct(recipe.producto_id, saved?.id || recipe.id);
+      }
+
+      return saved;
     } catch (e) {
       console.error("upsertRecipe error:", e);
       throw e;
@@ -1278,48 +1350,6 @@
     } catch (e) {
       console.error("deleteRecipe error:", e);
       throw e;
-    }
-  }
-
-  async function subscribeRealtime(onProductsChange, onSalesChange) {
-    if (typeof supabase.channel !== "function") return null;
-
-    try {
-      cleanupRealtime();
-
-      state.productsChannel = supabase
-        .channel("inventory-products-channel")
-        .on("postgres_changes", { event: "*", schema: "public", table: "productos" }, async () => {
-          if (typeof onProductsChange === "function") await onProductsChange();
-        })
-        .subscribe();
-
-      state.salesChannel = supabase
-        .channel("inventory-sales-channel")
-        .on("postgres_changes", { event: "*", schema: "public", table: "ventas" }, async () => {
-          if (typeof onSalesChange === "function") await onSalesChange();
-        })
-        .subscribe();
-
-      return true;
-    } catch (e) {
-      console.warn("Realtime no disponible:", e);
-      return false;
-    }
-  }
-
-  function cleanupRealtime() {
-    try {
-      if (state.productsChannel && typeof supabase.removeChannel === "function") {
-        supabase.removeChannel(state.productsChannel);
-        state.productsChannel = null;
-      }
-      if (state.salesChannel && typeof supabase.removeChannel === "function") {
-        supabase.removeChannel(state.salesChannel);
-        state.salesChannel = null;
-      }
-    } catch (e) {
-      console.warn("cleanupRealtime:", e);
     }
   }
 
