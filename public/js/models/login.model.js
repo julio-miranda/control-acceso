@@ -1,3 +1,4 @@
+// js/models/login.model.js
 (function (window) {
     "use strict";
 
@@ -22,6 +23,29 @@
         return !!(password && password.trim());
     }
 
+    async function getUsuarioByAuthId(authUserId) {
+        const attempts = [
+            { table: "v_usuarios", column: "id", select: "id, role, empresa_id" },
+            { table: "v_usuarios", column: "usuarios_id", select: "usuarios_id, role, empresa_id" },
+            { table: "usuarios", column: "id", select: "id, role, empresa_id" },
+            { table: "usuarios", column: "usuarios_id", select: "usuarios_id, role, empresa_id" }
+        ];
+
+        for (const attempt of attempts) {
+            const { data, error } = await supabase
+                .from(attempt.table)
+                .select(attempt.select)
+                .eq(attempt.column, authUserId)
+                .maybeSingle();
+
+            if (!error && data) {
+                return { data, error: null };
+            }
+        }
+
+        return { data: null, error: new Error("Usuario no existe en la base de datos.") };
+    }
+
     async function authenticate(email, password) {
         if (!validateEmail(email)) {
             return { ok: false, message: "Correo inválido." };
@@ -31,7 +55,6 @@
             return { ok: false, message: "Contraseña requerida." };
         }
 
-        // 1. Login con Supabase Auth
         const { data, error } = await supabase.auth.signInWithPassword({
             email: email.trim(),
             password
@@ -53,12 +76,7 @@
             };
         }
 
-        // 2. 🔥 TRAER USUARIO REAL DE TU TABLA
-        const { data: usuario, error: userError } = await supabase
-            .from("v_usuarios")
-            .select("id, role, empresa_id")
-            .eq("id", authUser.id)
-            .single();
+        const { data: usuario, error: userError } = await getUsuarioByAuthId(authUser.id);
 
         if (userError || !usuario) {
             return {
@@ -68,11 +86,12 @@
         }
 
         const role = normalizeRole(usuario.role);
+        const userId = usuario.id ?? usuario.usuarios_id ?? authUser.id;
 
         return {
             ok: true,
             user: {
-                id: usuario.id,
+                id: userId,
                 role,
                 raw: usuario
             }

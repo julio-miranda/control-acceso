@@ -89,6 +89,24 @@
     }
   }
 
+  function normalizeRole(role) {
+    return String(role || "")
+      .trim()
+      .toLowerCase();
+  }
+
+  function isAdminRole(role) {
+    const r = normalizeRole(role);
+    return [
+      "admin",
+      "administrador",
+      "administrator",
+      "superadmin",
+      "super administrador",
+      "super-administrador"
+    ].includes(r);
+  }
+
   function getWeekRange() {
     const hoy = new Date();
     const d = hoy.getDay() || 7;
@@ -141,7 +159,19 @@
         return null;
       }
 
-      return data || null;
+      if (!data) return null;
+
+      return {
+        id: data.id || uid,
+        nombre: data.nombre || data.email || "Usuario",
+        email: data.email || null,
+        telefono: data.telefono || null,
+        direccion: data.direccion || null,
+        role: normalizeRole(data.role || ""),
+        sucursal_id: data.sucursal_id || null,
+        empresa_id: data.empresa_id || null,
+        raw: data
+      };
     } catch (e) {
       console.error("loadCurrentUser:", e);
       return null;
@@ -167,7 +197,7 @@
 
   function applyModelContext(userData, uid) {
     state.currentUser = userData || null;
-    state.currentRole = String(userData?.role || "").toLowerCase();
+    state.currentRole = normalizeRole(userData?.role || "");
 
     syncAdminGlobals(userData);
 
@@ -375,7 +405,7 @@
     btnDel.textContent = "Desactivar";
     styleBtn(btnDel, "delete");
 
-    if (state.currentRole === "admin" || state.currentRole === "administrador") {
+    if (isAdminRole(state.currentRole)) {
       btnDel.addEventListener("click", () => confirmDeleteProduct(p));
     } else {
       btnDel.disabled = true;
@@ -1270,6 +1300,28 @@
     }
   }
 
+  async function resolveRole(uid, mergedUser) {
+    let role = normalizeRole(mergedUser?.role || "");
+
+    if (!role && global.AuthModel && typeof global.AuthModel.getUserRole === "function") {
+      try {
+        role = normalizeRole(await global.AuthModel.getUserRole(uid));
+      } catch (e) {
+        console.warn("No se pudo obtener rol desde AuthModel.getUserRole:", e);
+      }
+    }
+
+    if (!role && typeof global.getClaim === "function") {
+      try {
+        role = normalizeRole(await global.getClaim("role", ""));
+      } catch (e) {
+        console.warn("No se pudo obtener rol desde getClaim:", e);
+      }
+    }
+
+    return role;
+  }
+
   async function bootstrap() {
     try {
       const uid = await getSessionUid();
@@ -1289,14 +1341,20 @@
         return;
       }
 
-      const role = String(mergedUser.role || fallback?.role || "").toLowerCase();
+      const role = await resolveRole(uid, mergedUser);
 
-      if (role !== "admin") {
+      if (!isAdminRole(role)) {
+        console.log("[inventory.controller] Usuario sin permisos de administrador", {
+          uid,
+          role,
+          mergedUser
+        });
         alert("No tienes permisos de administrador.");
         await performLogout("not-admin");
         return;
       }
 
+      mergedUser.role = role || "admin";
       applyModelContext(mergedUser, uid);
 
       if (el.btnLogout) {

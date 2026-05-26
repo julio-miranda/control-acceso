@@ -267,7 +267,7 @@ document.addEventListener("DOMContentLoaded", () => {
           const { data: emp } = await supabase
             .from("empresa")
             .select("nombre")
-            .eq("id", window.adminEmpresa)
+            .eq("empresa_id", window.adminEmpresa)
             .maybeSingle();
 
           if (emp && emp.nombre) window.adminEmpresaNombre = emp.nombre;

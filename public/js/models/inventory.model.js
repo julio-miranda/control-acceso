@@ -1,6 +1,5 @@
 // js/models/inventory.model.js
-(function (global) {
-  loadSales
+(function (global) {saveRowById
   "use strict";
 
   const supabase = global.supabase;
@@ -16,6 +15,9 @@
   function logError(context, error, extra = {}) {
     console.log(`[InventoryModel] ${context}`, {
       message: error?.message,
+      code: error?.code,
+      details: error?.details,
+      hint: error?.hint,
       error,
       ...extra
     });
@@ -61,6 +63,56 @@
     if (typeof value === "string" || typeof value === "number") return new Date(value);
     if (value && typeof value === "object" && value.seconds) return new Date(value.seconds * 1000);
     return null;
+  }
+
+  function toNumber(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function toIso(value) {
+    if (!value) return null;
+    const d = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
+
+  function getTodayStart(date = new Date()) {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  function getTomorrowStart(date = new Date()) {
+    const d = getTodayStart(date);
+    d.setDate(d.getDate() + 1);
+    return d;
+  }
+
+  function getWeekStart(date = new Date()) {
+    const d = new Date(date);
+    const day = d.getDay() || 7;
+    d.setDate(d.getDate() - day + 1);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  function getNextWeekStart(date = new Date()) {
+    const d = getWeekStart(date);
+    d.setDate(d.getDate() + 7);
+    return d;
+  }
+
+  function getMonthStart(date = new Date()) {
+    const d = new Date(date);
+    d.setDate(1);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }
+
+  function getNextMonthStart(date = new Date()) {
+    const d = getMonthStart(date);
+    d.setMonth(d.getMonth() + 1);
+    return d;
   }
 
   function setContext(ctx = {}) {
@@ -119,23 +171,81 @@
   }
 
   function inferType(productId, preparedMap, insumoMap) {
-    if (preparedMap?.has(productId)) return "trago_preparado";
-    if (insumoMap?.has(productId)) return "insumo";
+    if (preparedMap?.has(String(productId))) return "trago_preparado";
+    if (insumoMap?.has(String(productId))) return "insumo";
     return "botella";
   }
 
+  function normalizeId(row, table = "") {
+    if (!row) return null;
+
+    const candidates = [
+      row.id,
+      row.producto_id,
+      row.receta_id,
+      row.usuario_id,
+      row.venta_id,
+      row.contacto_id,
+      row.sucursal_id,
+      row.empresa_id,
+      row.cliente_vip_id
+    ];
+
+    const tableName = String(table || "").toLowerCase();
+    const singular = tableName.endsWith("s") ? tableName.slice(0, -1) : tableName;
+    candidates.push(row[`${tableName}_id`]);
+    candidates.push(row[`${singular}_id`]);
+
+    const found = candidates.find(v => v !== undefined && v !== null && String(v).trim() !== "");
+    return found ?? null;
+  }
+
+  async function fetchTableRows(table, select = "*") {
+    const supabase = getSupabase();
+
+    try {
+      const { data, error } = await supabase
+        .from(table)
+        .select(select);
+
+      if (error) {
+        logError(`fetchTableRows(${table})`, error);
+        return [];
+      }
+
+      return Array.isArray(data) ? data : (data ? [data] : []);
+    } catch (err) {
+      logError(`fetchTableRows(${table})(catch)`, err);
+      return [];
+    }
+  }
+
+  async function fetchManyByIds(table, ids, select = "*") {
+    const unique = [...new Set((ids || []).filter(Boolean).map(String))];
+    if (!unique.length) return {};
+
+    const rows = await fetchTableRows(table, select);
+    if (!rows.length) return {};
+
+    return Object.fromEntries(
+      rows
+        .map(row => [String(normalizeId(row, table) || ""), row])
+        .filter(([id]) => id && unique.includes(id))
+    );
+  }
+
   function normalizeProduct(row, stockMap = new Map(), preparedMap = new Map(), insumoMap = new Map(), recipeMap = new Map()) {
-    const id = row?.id;
+    const id = normalizeId(row, "productos");
 
     return {
       id,
       nombre: String(getValue(row, ["nombre", "name", "producto", "descripcion"], "Sin nombre")),
       tipo_producto: inferType(id, preparedMap, insumoMap),
-      receta_id: recipeMap.get(id) || null,
-      stock: Number(stockMap.get(id) ?? 0) || 0,
+      receta_id: recipeMap.get(String(id)) || null,
+      stock: Number(stockMap.get(String(id)) ?? 0) || 0,
       precio: Number(getValue(row, ["precio", "price"], 0)) || 0,
       costo_promedio: Number(getValue(row, ["costo_promedio", "costo", "avg_cost"], 0)) || 0,
-      unidad_medida: String(insumoMap.get(id) || "unidad"),
+      unidad_medida: String(insumoMap.get(String(id)) || "unidad"),
       activo: Boolean(getValue(row, ["activo"], true)),
       sucursal_id: getValue(row, ["sucursal_id"], null),
       empresa_id: getValue(row, ["empresa_id"], null),
@@ -146,7 +256,7 @@
 
   function normalizeVenta(row) {
     return {
-      id: row?.id,
+      id: normalizeId(row, "ventas"),
       subtotal: Number(getValue(row, ["subtotal"], 0)) || 0,
       descuento: Number(getValue(row, ["descuento"], 0)) || 0,
       impuesto: Number(getValue(row, ["impuesto"], 0)) || 0,
@@ -217,18 +327,9 @@
 
   async function fetchUserFromDBById(uid) {
     try {
-      const { data, error } = await supabase
-        .from("v_usuarios")
-        .select("id,nombre,role,empresa_id,sucursal_id,email,telefono,direccion")
-        .eq("id", uid)
-        .maybeSingle();
-
-      if (error) {
-        console.warn("Error consultando usuarios:", error);
-        return null;
-      }
-
-      return data || null;
+      const rows = await fetchTableRows("v_usuarios", "*");
+      const user = rows.find(r => String(normalizeId(r, "usuarios") || "") === String(uid));
+      return user || null;
     } catch (e) {
       console.error("fetchUserFromDBById:", e);
       return null;
@@ -312,23 +413,21 @@
     }
 
     try {
-      const [preparedRes, insumoRes] = await Promise.all([
-        supabase.from("productos_preparados").select("id,receta_id").in("id", unique),
-        supabase.from("productos_insumo").select("id,unidad_medida").in("id", unique)
-      ]);
+      const preparedRows = await fetchTableRows("productos_preparados", "*");
+      const insumoRows = await fetchTableRows("productos_insumo", "*");
 
-      if (!preparedRes.error) {
-        (preparedRes.data || []).forEach((r) => {
-          preparedMap.set(String(r.id), String(r.id));
-          if (r.receta_id) recipeMap.set(String(r.id), r.receta_id);
-        });
-      }
+      (preparedRows || []).forEach((r) => {
+        const rid = String(normalizeId(r, "productos_preparados") || "");
+        if (!rid || !unique.includes(rid)) return;
+        preparedMap.set(rid, rid);
+        if (r.receta_id) recipeMap.set(rid, r.receta_id);
+      });
 
-      if (!insumoRes.error) {
-        (insumoRes.data || []).forEach((r) => {
-          insumoMap.set(String(r.id), r.unidad_medida || "unidad");
-        });
-      }
+      (insumoRows || []).forEach((r) => {
+        const rid = String(normalizeId(r, "productos_insumo") || "");
+        if (!rid || !unique.includes(rid)) return;
+        insumoMap.set(rid, r.unidad_medida || "unidad");
+      });
     } catch (e) {
       console.warn("loadProductRelations error:", e);
     }
@@ -342,7 +441,7 @@
     try {
       const { data, error } = await supabase
         .from("movimientos_stock_base")
-        .select("producto_id,tipo,cantidad");
+        .select("*");
 
       if (error) {
         console.warn("loadStockMap error:", error);
@@ -384,15 +483,8 @@
       }
       const authUser = authData?.user || null;
 
-      const { data: user, error } = await supabase
-        .from("usuarios")
-        .select("id,role,sucursal_id,contacto_id,created_at,updated_at")
-        .eq("id", userId)
-        .maybeSingle();
-
-      if (error) {
-        logError("getCurrentUserProfile(usuarios)", error, { userId });
-      }
+      const users = await fetchTableRows("usuarios", "*");
+      const user = users.find(r => String(normalizeId(r, "usuarios") || "") === String(userId)) || null;
 
       if (!user) {
         console.warn("[DashboardModel] Usuario no encontrado en tabla usuarios", { userId });
@@ -425,12 +517,12 @@
         fetchManyByIds(
           "contactos",
           user.contacto_id ? [user.contacto_id] : [],
-          "id,nombre,telefono,email,identificacion,direccion,created_at,updated_at"
+          "*"
         ),
         fetchManyByIds(
           "sucursales",
           user.sucursal_id ? [user.sucursal_id] : [],
-          "id,nombre,codigo,lat,lng,created_at,empresa_id"
+          "*"
         )
       ]);
 
@@ -439,24 +531,12 @@
 
       let empresa = null;
       if (sucursal?.empresa_id) {
-        const { data: empresaData, error: empresaError } = await supabase
-          .from("empresa")
-          .select("id,nombre")
-          .eq("id", sucursal.empresa_id)
-          .maybeSingle();
-
-        if (empresaError) {
-          logError("getCurrentUserProfile(empresa)", empresaError, {
-            userId,
-            empresa_id: sucursal.empresa_id
-          });
-        } else {
-          empresa = empresaData || null;
-        }
+        const empresas = await fetchTableRows("empresa", "*");
+        empresa = empresas.find(e => String(normalizeId(e, "empresa") || "") === String(sucursal.empresa_id)) || null;
       }
 
       return {
-        id: user.id,
+        id: normalizeId(user, "usuarios"),
         nombre:
           contacto?.nombre ||
           authUser?.user_metadata?.nombre ||
@@ -498,52 +578,17 @@
     }
   }
 
-  async function fetchManyByIds(table, ids, select = "*") {
-    const supabase = getSupabase();
-    const unique = [...new Set((ids || []).filter(Boolean))];
-
-    if (!unique.length) return {};
-
-    try {
-      const { data, error } = await supabase
-        .from(table)
-        .select(select)
-        .in("id", unique);
-
-      if (error) {
-        logError(`fetchManyByIds(${table})`, error, { ids: unique });
-        return {};
-      }
-
-      return Object.fromEntries((data || []).map(row => [row.id, row]));
-    } catch (err) {
-      logError(`fetchManyByIds(${table})(catch)`, err, { ids: unique });
-      return {};
-    }
-  }
-
   async function getProducts() {
-    const supabase = getSupabase();
-
     try {
-      const [productsRes, stockMap, relations] = await Promise.all([
-        supabase
-          .from("productos")
-          .select("id,sucursal_id,nombre,precio,created_at,updated_at,costo_promedio,activo")
-          .order("nombre", { ascending: true }),
-        loadStockMap(),
-        Promise.resolve(null)
+      const [productsRows, stockMap] = await Promise.all([
+        fetchTableRows("productos", "*"),
+        loadStockMap()
       ]);
 
-      if (productsRes.error) {
-        logError("getProducts(productos)", productsRes.error);
-        return [];
-      }
-
-      const productIds = (productsRes.data || []).map(p => p.id);
+      const productIds = productsRows.map(p => normalizeId(p, "productos")).filter(Boolean);
       const { preparedMap, insumoMap, recipeMap } = await loadProductRelations(productIds);
 
-      return (productsRes.data || []).map(product =>
+      return (productsRows || []).map(product =>
         normalizeProduct(product, stockMap, preparedMap, insumoMap, recipeMap)
       );
     } catch (err) {
@@ -553,25 +598,10 @@
   }
 
   async function getVipClients() {
-    const supabase = getSupabase();
-
     try {
-      const { data: clients, error } = await supabase
-        .from("clientes_vip")
-        .select("id,sucursal_id,notas,activo,fecha_alta,created_at,updated_at,contacto_id")
-        .order("fecha_alta", { ascending: false });
-
-      if (error) {
-        logError("getVipClients(clientes_vip)", error);
-        return [];
-      }
-
+      const clients = await fetchTableRows("clientes_vip", "*");
       const contactIds = (clients || []).map(c => c.contacto_id).filter(Boolean);
-      const contactsMap = await fetchManyByIds(
-        "contactos",
-        contactIds,
-        "id,nombre,telefono,email,identificacion,direccion,created_at,updated_at"
-      );
+      const contactsMap = await fetchManyByIds("contactos", contactIds, "*");
 
       return (clients || []).map(client => {
         const contact = client.contacto_id ? contactsMap[client.contacto_id] : null;
@@ -596,16 +626,12 @@
     const clientIds = [...new Set((rows || []).map(r => r.cliente_vip_id).filter(Boolean))];
 
     const [usersMap, clientsMap] = await Promise.all([
-      fetchManyByIds("v_usuarios", userIds, "id,role,sucursal_id,empresa_id,nombre,email"),
-      fetchManyByIds("clientes_vip", clientIds, "id,sucursal_id,notas,activo,fecha_alta,created_at,updated_at,contacto_id")
+      fetchManyByIds("v_usuarios", userIds, "*"),
+      fetchManyByIds("clientes_vip", clientIds, "*")
     ]);
 
     const clientContactIds = Object.values(clientsMap).map(c => c.contacto_id).filter(Boolean);
-    const clientContactsMap = await fetchManyByIds(
-      "contactos",
-      clientContactIds,
-      "id,nombre,telefono,email,identificacion,direccion,created_at,updated_at"
-    );
+    const clientContactsMap = await fetchManyByIds("contactos", clientContactIds, "*");
 
     return (rows || []).map(row => {
       const user = usersMap[row.usuario_id] || null;
@@ -627,26 +653,21 @@
   }
 
   async function getSalesBetween(startDate, endDate) {
-    const supabase = getSupabase();
-
     try {
-      let query = supabase
-        .from("ventas")
-        .select("id,usuario_id,subtotal,descuento,impuesto,total,metodo_pago,estado,observacion,created_at,cliente_vip_id,evento_id")
-        .eq("estado", "finalizada")
-        .order("created_at", { ascending: false });
+      const rows = await fetchTableRows("ventas", "*");
 
-      if (startDate) query = query.gte("created_at", toIso(startDate));
-      if (endDate) query = query.lt("created_at", toIso(endDate));
+      const filtered = (rows || [])
+        .filter((row) => String(row.estado || "").toLowerCase() === "finalizada")
+        .filter((row) => {
+          const created = row.created_at ? new Date(row.created_at) : null;
+          if (!created || Number.isNaN(created.getTime())) return false;
+          if (startDate && created < new Date(startDate)) return false;
+          if (endDate && created >= new Date(endDate)) return false;
+          return true;
+        })
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-      const { data, error } = await query;
-
-      if (error) {
-        logError("getSalesBetween(ventas)", error, { startDate, endDate });
-        return [];
-      }
-
-      return await decorateSales(data || []);
+      return await decorateSales(filtered);
     } catch (err) {
       logError("getSalesBetween(catch)", err, { startDate, endDate });
       return [];
@@ -666,18 +687,8 @@
   }
 
   async function getTopSeller() {
-    const supabase = getSupabase();
-
     try {
-      const { data, error } = await supabase
-        .from("ventas")
-        .select("usuario_id,subtotal,descuento,impuesto,total,created_at,estado")
-        .eq("estado", "finalizada");
-
-      if (error) {
-        logError("getTopSeller(ventas)", error);
-        return null;
-      }
+      const data = await fetchTableRows("ventas", "*");
 
       const grouped = new Map();
 
@@ -746,22 +757,11 @@
   }
 
   async function getPeriodReport(viewName, fieldName, dateValue) {
-    const supabase = getSupabase();
     const key = dateValue instanceof Date ? dateValue.toISOString().slice(0, 10) : String(dateValue || "");
 
     try {
-      const { data, error } = await supabase
-        .from(viewName)
-        .select("*")
-        .eq(fieldName, key)
-        .maybeSingle();
-
-      if (error) {
-        logError(`getPeriodReport(${viewName})`, error, { fieldName, key });
-        return null;
-      }
-
-      return data || null;
+      const rows = await fetchTableRows(viewName, "*");
+      return rows.find(r => String(r[fieldName] || "") === key) || null;
     } catch (err) {
       logError(`getPeriodReport(${viewName})(catch)`, err, { fieldName, key });
       return null;
@@ -781,36 +781,31 @@
   }
 
   async function getMonthlyProductSalesMap() {
-    const supabase = getSupabase();
     const monthStart = getMonthStart();
     const nextMonthStart = getNextMonthStart();
 
     try {
-      const { data, error } = await supabase
-        .from("venta_detalle")
-        .select("producto_id,cantidad,ventas!inner(created_at,estado)")
-        .eq("ventas.estado", "finalizada")
-        .gte("ventas.created_at", toIso(monthStart))
-        .lt("ventas.created_at", toIso(nextMonthStart));
-
-      if (error) {
-        logError("getMonthlyProductSalesMap", error);
-        return { unitsMap: {}, boxesMap: {}, totalBoxes: 0 };
-      }
+      const sales = await loadSales({ limit: 2000 });
 
       const unitsMap = {};
       const boxesMap = {};
       let totalBoxes = 0;
 
-      (data || []).forEach(row => {
-        const productId = row.producto_id;
-        const qty = toNumber(row.cantidad);
+      (sales || []).forEach(sale => {
+        const saleDate = parseDate(sale.created_at);
+        if (!saleDate) return;
+        if (saleDate < monthStart || saleDate >= nextMonthStart) return;
 
-        if (!productId || qty <= 0) return;
+        (sale.venta_detalle || []).forEach(row => {
+          const productId = row.producto_id;
+          const qty = toNumber(row.cantidad);
 
-        unitsMap[productId] = (unitsMap[productId] || 0) + qty;
-        boxesMap[productId] = (boxesMap[productId] || 0) + 0;
-        totalBoxes += 0;
+          if (!productId || qty <= 0) return;
+
+          unitsMap[productId] = (unitsMap[productId] || 0) + qty;
+          boxesMap[productId] = (boxesMap[productId] || 0) + 0;
+          totalBoxes += 0;
+        });
       });
 
       return { unitsMap, boxesMap, totalBoxes };
@@ -827,7 +822,7 @@
       const { data, error } = await supabase
         .from("productos_preparados")
         .upsert({ id: productId, receta_id: recipeId }, { onConflict: "id" })
-        .select("id,receta_id")
+        .select("*")
         .maybeSingle();
 
       if (error) {
@@ -870,7 +865,7 @@
       const { data, error } = await supabase
         .from("productos_insumo")
         .upsert({ id: productId, unidad_medida: unidadMedida }, { onConflict: "id" })
-        .select("id,unidad_medida")
+        .select("*")
         .maybeSingle();
 
       if (error) {
@@ -907,20 +902,9 @@
   }
 
   async function getProductById(productId) {
-    const supabase = getSupabase();
-
     try {
-      const { data, error } = await supabase
-        .from("productos")
-        .select("id,sucursal_id,nombre,precio,created_at,updated_at,costo_promedio,activo")
-        .eq("id", productId)
-        .maybeSingle();
-
-      if (error) {
-        logError("getProductById", error, { productId });
-        return null;
-      }
-
+      const rows = await fetchTableRows("productos", "*");
+      const data = rows.find(r => String(normalizeId(r, "productos") || "") === String(productId)) || null;
       if (!data) return null;
 
       const stockMap = await loadStockMap();
@@ -934,54 +918,46 @@
   }
 
   async function loadSales({ limit = 50 } = {}) {
-    const supabase = getSupabase();
-
     try {
-      const { data, error } = await supabase
-        .from("ventas")
-        .select(`
-        id,
-        subtotal,
-        descuento,
-        impuesto,
-        total,
-        metodo_pago,
-        estado,
-        observacion,
-        created_at,
-        usuario_id,
-        cliente_vip_id,
-        evento_id,
-        venta_detalle (
-          id,
-          cantidad,
-          precio_unitario,
-          total_linea,
-          producto_id,
-          receta_id,
-          costo_unitario,
-          productos:producto_id (
-            id,
-            nombre
-          )
-        )
-      `)
-        .eq("estado", "finalizada")
-        .order("created_at", { ascending: false })
-        .limit(limit);
+      const [ventasRows, detallesRows, productosRows] = await Promise.all([
+        fetchTableRows("ventas", "*"),
+        fetchTableRows("venta_detalle", "*"),
+        fetchTableRows("productos", "*")
+      ]);
 
-      if (error) {
-        logError("loadSales", error);
-        return [];
-      }
+      const productMap = Object.fromEntries(
+        productosRows
+          .map(p => [String(normalizeId(p, "productos") || ""), p])
+          .filter(([id]) => id)
+      );
 
-      return (data || []).map(normalizeVenta);
+      const detallesByVenta = {};
+      (detallesRows || []).forEach((d) => {
+        const ventaId = String(d.venta_id || "");
+        if (!ventaId) return;
+        if (!detallesByVenta[ventaId]) detallesByVenta[ventaId] = [];
+        detallesByVenta[ventaId].push({
+          ...d,
+          productos: productMap[String(d.producto_id || "")] || null
+        });
+      });
+
+      const filtered = (ventasRows || [])
+        .filter((v) => String(v.estado || "").toLowerCase() === "finalizada")
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+        .slice(0, limit)
+        .map((v) => normalizeVenta({
+          ...v,
+          venta_detalle: detallesByVenta[String(normalizeId(v, "ventas") || "")] || []
+        }));
+
+      return filtered;
     } catch (err) {
       logError("loadSales(catch)", err);
       return [];
     }
   }
-  
+
   async function createProduct(payload) {
     const supabase = getSupabase();
 
@@ -997,20 +973,20 @@
       const { data, error } = await supabase
         .from("productos")
         .insert(insertPayload)
-        .select("id,sucursal_id,nombre,precio,created_at,updated_at,costo_promedio,activo")
+        .select("*")
         .maybeSingle();
 
       if (error) throw error;
 
       const product = data || insertPayload;
       if (payload.tipo_producto === "insumo") {
-        await upsertInsumoProduct(product.id, payload.unidad_medida || "unidad");
+        await upsertInsumoProduct(normalizeId(product, "productos"), payload.unidad_medida || "unidad");
       }
 
       const stock = Number(payload.stock || 0) || 0;
       if (stock > 0) {
         await registerStockMovement({
-          producto_id: product.id,
+          producto_id: normalizeId(product, "productos"),
           tipo: "entrada",
           cantidad: stock,
           costo: Number(payload.costo_promedio || 0) || 0,
@@ -1018,8 +994,8 @@
         });
       }
 
-      state.productsCache[product.id] = product;
-      return await getProductById(product.id);
+      state.productsCache[normalizeId(product, "productos")] = product;
+      return await getProductById(normalizeId(product, "productos"));
     } catch (e) {
       console.error("createProduct error:", e);
       throw e;
@@ -1042,7 +1018,7 @@
         .from("productos")
         .update(updatePayload)
         .eq("id", productId)
-        .select("id,sucursal_id,nombre,precio,created_at,updated_at,costo_promedio,activo")
+        .select("*")
         .maybeSingle();
 
       if (error) throw error;
@@ -1050,9 +1026,9 @@
       if (payload.tipo_producto === "insumo" && payload.unidad_medida) {
         await upsertInsumoProduct(productId, payload.unidad_medida);
       } else if (payload.tipo_producto === "trago_preparado") {
-        // El vínculo real se crea al guardar la receta.
+        // Vínculo se maneja al guardar la receta.
       } else if (payload.tipo_producto === "botella" || payload.tipo_producto === "servicio") {
-        await removeInsumoProduct(productId).catch(() => { });
+        await removeInsumoProduct(productId).catch(() => {});
       }
 
       const product = data || { id: productId, ...updatePayload };
@@ -1123,7 +1099,7 @@
     try {
       const { data, error } = await supabase
         .from("movimientos_stock_base")
-        .select("id,producto_id,usuario_id,tipo,cantidad,costo,created_at,referencia_tipo,referencia_id,observacion")
+        .select("*")
         .eq("producto_id", productId)
         .order("created_at", { ascending: false })
         .limit(50);
@@ -1132,7 +1108,7 @@
 
       const rows = data || [];
       const userIds = [...new Set(rows.map(r => r.usuario_id).filter(Boolean))];
-      const usersMap = await fetchManyByIds("v_usuarios", userIds, "id,nombre,email,role");
+      const usersMap = await fetchManyByIds("v_usuarios", userIds, "*");
 
       return rows.map(row => ({
         ...row,
@@ -1147,40 +1123,37 @@
   }
 
   async function getRecipes() {
-    const supabase = getSupabase();
-
     try {
-      const { data: recipes, error } = await supabase
-        .from("recetas")
-        .select("id,sucursal_id,nombre,descripcion,rendimiento,activa,created_at,updated_at")
-        .order("created_at", { ascending: false });
+      const [recipes, preparedRows, productsRows] = await Promise.all([
+        fetchTableRows("recetas", "*"),
+        fetchTableRows("productos_preparados", "*"),
+        fetchTableRows("productos", "*")
+      ]);
 
-      if (error) throw error;
+      const productMap = Object.fromEntries(
+        (productsRows || [])
+          .map(p => [String(normalizeId(p, "productos") || ""), p])
+          .filter(([id]) => id)
+      );
 
-      const recipeIds = (recipes || []).map(r => r.id);
-      const preparedMap = new Map();
+      const preparedByRecipe = {};
+      (preparedRows || []).forEach((r) => {
+        const rid = String(r.receta_id || "");
+        if (!rid) return;
+        preparedByRecipe[rid] = normalizeId(r, "productos_preparados") || null;
+      });
 
-      if (recipeIds.length) {
-        const { data: preparedRows, error: preparedError } = await supabase
-          .from("productos_preparados")
-          .select("id,receta_id")
-          .in("receta_id", recipeIds);
+      return (recipes || []).map((r) => {
+        const recipeId = String(normalizeId(r, "recetas") || "");
+        const productId = preparedByRecipe[recipeId] || null;
 
-        if (!preparedError) {
-          (preparedRows || []).forEach((r) => {
-            preparedMap.set(String(r.receta_id), String(r.id));
-          });
-        }
-      }
-
-      const productIds = [...new Set([...preparedMap.values()])];
-      const productsMap = await fetchManyByIds("productos", productIds, "id,nombre,precio,activo");
-
-      return (recipes || []).map((r) => ({
-        ...r,
-        producto_id: preparedMap.get(String(r.id)) || null,
-        producto_nombre: productsMap[preparedMap.get(String(r.id))]?.nombre || "-"
-      }));
+        return {
+          ...r,
+          id: normalizeId(r, "recetas"),
+          producto_id: productId,
+          producto_nombre: productId && productMap[String(productId)] ? (productMap[String(productId)].nombre || "-") : "-"
+        };
+      });
     } catch (e) {
       console.error("getRecipes error:", e);
       return [];
@@ -1188,29 +1161,21 @@
   }
 
   async function getRecipeByProductId(productId) {
-    const supabase = getSupabase();
-
     try {
-      const { data: link, error: linkError } = await supabase
-        .from("productos_preparados")
-        .select("id,receta_id")
-        .eq("id", productId)
-        .maybeSingle();
+      const [links, recipes] = await Promise.all([
+        fetchTableRows("productos_preparados", "*"),
+        fetchTableRows("recetas", "*")
+      ]);
 
-      if (linkError) throw linkError;
+      const link = (links || []).find(l => String(normalizeId(l, "productos_preparados") || "") === String(productId));
       if (!link?.receta_id) return null;
 
-      const { data: recipe, error: recipeError } = await supabase
-        .from("recetas")
-        .select("id,sucursal_id,nombre,descripcion,rendimiento,activa,created_at,updated_at")
-        .eq("id", link.receta_id)
-        .maybeSingle();
-
-      if (recipeError) throw recipeError;
+      const recipe = (recipes || []).find(r => String(normalizeId(r, "recetas") || "") === String(link.receta_id));
       if (!recipe) return null;
 
       return {
         ...recipe,
+        id: normalizeId(recipe, "recetas"),
         producto_id: productId
       };
     } catch (e) {
@@ -1220,30 +1185,11 @@
   }
 
   async function getRecipeDetails(recipeId) {
-    const supabase = getSupabase();
-
     try {
-      const { data, error } = await supabase
-        .from("receta_detalle")
-        .select(`
-          id,
-          receta_id,
-          insumo_id,
-          cantidad,
-          desperdicio,
-          created_at,
-          insumos:insumo_id (
-            id,
-            nombre,
-            precio,
-            costo_promedio
-          )
-        `)
-        .eq("receta_id", recipeId)
-        .order("created_at", { ascending: true });
-
-      if (error) throw error;
-      return data || [];
+      const rows = await fetchTableRows("receta_detalle", "*");
+      return (rows || [])
+        .filter(r => String(r.receta_id || "") === String(recipeId))
+        .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
     } catch (e) {
       console.error("getRecipeDetails error:", e);
       return [];
@@ -1266,7 +1212,7 @@
       const { data, error } = await supabase
         .from("recetas")
         .upsert(payload, { onConflict: "id" })
-        .select("id,sucursal_id,nombre,descripcion,rendimiento,activa,created_at,updated_at")
+        .select("*")
         .maybeSingle();
 
       if (error) throw error;
@@ -1392,28 +1338,17 @@
     saleDetailText,
     bootstrapAuth,
     loadProducts: async function () {
-      const supabase = getSupabase();
-
       try {
-        const [productsRes, sales, stockMap, relations] = await Promise.all([
-          supabase
-            .from("productos")
-            .select("id,sucursal_id,nombre,precio,created_at,updated_at,costo_promedio,activo")
-            .order("nombre", { ascending: true }),
+        const [productsRows, sales, stockMap] = await Promise.all([
+          fetchTableRows("productos", "*"),
           loadSales({ limit: 50 }),
-          loadStockMap(),
-          Promise.resolve(null)
+          loadStockMap()
         ]);
 
-        if (productsRes.error) {
-          logError("loadProducts(productos)", productsRes.error);
-          return { products: [], forecastMap: {} };
-        }
-
-        const productIds = (productsRes.data || []).map(p => p.id);
+        const productIds = (productsRows || []).map(p => normalizeId(p, "productos")).filter(Boolean);
         const { preparedMap, insumoMap, recipeMap } = await loadProductRelations(productIds);
 
-        const products = (productsRes.data || []).map(product =>
+        const products = (productsRows || []).map(product =>
           normalizeProduct(product, stockMap, preparedMap, insumoMap, recipeMap)
         );
 
@@ -1433,11 +1368,7 @@
 
           const details = Array.isArray(sale.venta_detalle) ? sale.venta_detalle : [];
           for (const d of details) {
-            const productId =
-              d.producto_id ||
-              d.productos?.id ||
-              null;
-
+            const productId = d.producto_id || d.productos?.id || null;
             if (!productId) continue;
 
             const qty = Number(d.cantidad || 0) || 0;
@@ -1481,13 +1412,8 @@
     loadSales,
     fetchProductsRows: async function () {
       try {
-        const { data, error } = await supabase
-          .from("productos")
-          .select("id,sucursal_id,nombre,precio,created_at,updated_at,costo_promedio,activo")
-          .order("nombre", { ascending: true });
-
-        if (error) throw error;
-        return data || [];
+        const rows = await fetchTableRows("productos", "*");
+        return rows || [];
       } catch (e) {
         console.error("fetchProductsRows error:", e);
         return [];
@@ -1518,16 +1444,13 @@
       }
 
       try {
-        const { data, error } = await supabase
-          .from("v_usuarios")
-          .select("id,nombre")
-          .eq("id", userId)
-          .maybeSingle();
+        const rows = await fetchTableRows("v_usuarios", "*");
+        const user = rows.find(r => String(normalizeId(r, "usuarios") || "") === String(userId));
 
-        if (error || !data) {
+        if (!user) {
           state.usersCache[userId] = "Desconocido";
         } else {
-          state.usersCache[userId] = data.nombre || "Desconocido";
+          state.usersCache[userId] = user.nombre || "Desconocido";
         }
 
         return state.usersCache[userId];

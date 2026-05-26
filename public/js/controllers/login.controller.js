@@ -1,3 +1,4 @@
+//js/controllers/login.controller.js
 (function (window, document) {
     function initLoginController() {
         const form = document.getElementById("login-form");

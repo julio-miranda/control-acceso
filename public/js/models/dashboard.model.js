@@ -1,5 +1,7 @@
 // js/models/dashboard.model.js
 (function (global) {
+  "use strict";
+
   function getSupabase() {
     if (!global.supabase) {
       throw new Error("Supabase no está inicializado.");
@@ -13,6 +15,34 @@
       error,
       ...extra
     });
+  }
+
+  const ID_CANDIDATES = {
+    usuarios: ["usuarios_id", "id"],
+    contactos: ["contactos_id", "id"],
+    sucursales: ["sucursales_id", "id"],
+    empresa: ["empresa_id", "id"],
+    productos: ["productos_id", "id"],
+    clientes_vip: ["clientes_vip_id", "id"],
+    ventas: ["ventas_id", "id"],
+    venta_detalle: ["venta_detalle_id", "id"],
+    recetas: ["recetas_id", "id"],
+    receta_detalle: ["receta_detalle_id", "id"],
+    mesas: ["mesas_id", "id"],
+    jornadas: ["jornadas_id", "id"],
+    movimientos_stock_base: ["movimientos_stock_base_id", "id"]
+  };
+
+  function getIdCandidates(table) {
+    return ID_CANDIDATES[table] || ["id"];
+  }
+
+  function composeSelect(fields, idColumn) {
+    const base = String(fields || "").trim();
+    if (!idColumn || idColumn === "id") {
+      return base ? `id,${base}` : "id";
+    }
+    return base ? `id:${idColumn},${base}` : `id:${idColumn}`;
   }
 
   function toNumber(value) {
@@ -85,27 +115,100 @@
     return d ? d.toISOString() : null;
   }
 
-  async function fetchManyByIds(table, ids, select = "*") {
-    const supabase = getSupabase();
-    const unique = [...new Set((ids || []).filter(Boolean))];
+  function normalizeRowId(row, idColumn) {
+    if (!row) return row;
+    if (row.id == null && idColumn && row[idColumn] != null) {
+      row.id = row[idColumn];
+    }
+    return row;
+  }
 
+  async function queryWithIdFallback(table, options, buildQuery) {
+    const supabase = getSupabase();
+    const candidates = getIdCandidates(table);
+    let lastError = null;
+
+    for (const idColumn of candidates) {
+      try {
+        const query = buildQuery(supabase.from(table), idColumn);
+        const { data, error } = await query;
+
+        if (error) {
+          lastError = error;
+          continue;
+        }
+
+        const rows = Array.isArray(data) ? data : (data ? [data] : []);
+        return {
+          data: rows.map(row => normalizeRowId({ ...row }, idColumn)),
+          error: null,
+          idColumn
+        };
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    logError(`queryWithIdFallback(${table})`, lastError, options || {});
+    return { data: null, error: lastError, idColumn: null };
+  }
+
+  async function fetchManyByIds(table, ids, select = "*") {
+    const unique = [...new Set((ids || []).filter(Boolean))];
     if (!unique.length) return {};
 
     try {
-      const { data, error } = await supabase
-        .from(table)
-        .select(select)
-        .in("id", unique);
+      const { data, error } = await queryWithIdFallback(
+        table,
+        { ids: unique, select },
+        (qb, idColumn) => qb.select(composeSelect(select, idColumn)).in(idColumn, unique)
+      );
 
-      if (error) {
-        logError(`fetchManyByIds(${table})`, error, { ids: unique });
-        return {};
-      }
-
+      if (error) return {};
       return Object.fromEntries((data || []).map(row => [row.id, row]));
     } catch (err) {
       logError(`fetchManyByIds(${table})(catch)`, err, { ids: unique });
       return {};
+    }
+  }
+
+  async function fetchOneById(table, id, select = "*") {
+    if (!id) return null;
+
+    try {
+      const { data, error } = await queryWithIdFallback(
+        table,
+        { id, select },
+        (qb, idColumn) => qb.select(composeSelect(select, idColumn)).eq(idColumn, id).maybeSingle()
+      );
+
+      if (error) return null;
+      return data?.[0] || null;
+    } catch (err) {
+      logError(`fetchOneById(${table})(catch)`, err, { id });
+      return null;
+    }
+  }
+
+  async function fetchAllRows(table, select = "*", buildExtraQuery = null) {
+    try {
+      const { data, error } = await queryWithIdFallback(
+        table,
+        { select },
+        (qb, idColumn) => {
+          let q = qb.select(composeSelect(select, idColumn));
+          if (typeof buildExtraQuery === "function") {
+            q = buildExtraQuery(q, idColumn);
+          }
+          return q;
+        }
+      );
+
+      if (error) return [];
+      return data || [];
+    } catch (err) {
+      logError(`fetchAllRows(${table})(catch)`, err);
+      return [];
     }
   }
 
@@ -130,15 +233,11 @@
     try {
       const authUser = await getAuthUser();
 
-      const { data: user, error } = await supabase
-        .from("usuarios")
-        .select("id,role,sucursal_id,contacto_id,created_at,updated_at")
-        .eq("id", userId)
-        .maybeSingle();
-
-      if (error) {
-        logError("getCurrentUserProfile(usuarios)", error, { userId });
-      }
+      const user = await fetchOneById(
+        "usuarios",
+        userId,
+        "role,sucursal_id,contacto_id,created_at,updated_at"
+      );
 
       if (!user) {
         console.warn("[DashboardModel] Usuario no encontrado en tabla usuarios", { userId });
@@ -171,12 +270,12 @@
         fetchManyByIds(
           "contactos",
           user.contacto_id ? [user.contacto_id] : [],
-          "id,nombre,telefono,email,identificacion,direccion,created_at,updated_at"
+          "nombre,telefono,email,identificacion,direccion,created_at,updated_at"
         ),
         fetchManyByIds(
           "sucursales",
           user.sucursal_id ? [user.sucursal_id] : [],
-          "id,nombre,codigo,lat,lng,created_at,empresa_id"
+          "nombre,codigo,lat,lng,created_at,empresa_id"
         )
       ]);
 
@@ -185,20 +284,7 @@
 
       let empresa = null;
       if (sucursal?.empresa_id) {
-        const { data: empresaData, error: empresaError } = await supabase
-          .from("empresa")
-          .select("id,nombre")
-          .eq("id", sucursal.empresa_id)
-          .maybeSingle();
-
-        if (empresaError) {
-          logError("getCurrentUserProfile(empresa)", empresaError, {
-            userId,
-            empresa_id: sucursal.empresa_id
-          });
-        } else {
-          empresa = empresaData || null;
-        }
+        empresa = await fetchOneById("empresa", sucursal.empresa_id, "nombre");
       }
 
       return {
@@ -246,26 +332,17 @@
   }
 
   async function getProducts() {
-    const supabase = getSupabase();
-
     try {
-      const { data: products, error: productsError } = await supabase
-        .from("productos")
-        .select("id,sucursal_id,nombre,precio,created_at,updated_at,costo_promedio,activo")
-        .order("nombre", { ascending: true });
+      const products = await fetchAllRows(
+        "productos",
+        "sucursal_id,nombre,precio,created_at,updated_at,costo_promedio,activo",
+        (q) => q.order("nombre", { ascending: true })
+      );
 
-      if (productsError) {
-        logError("getProducts(productos)", productsError);
-        return [];
-      }
-
-      const { data: movements, error: movError } = await supabase
-        .from("movimientos_stock_base")
-        .select("producto_id,tipo,cantidad");
-
-      if (movError) {
-        logError("getProducts(movimientos_stock_base)", movError);
-      }
+      const movements = await fetchAllRows(
+        "movimientos_stock_base",
+        "producto_id,tipo,cantidad"
+      );
 
       const stockMap = {};
       (movements || []).forEach(row => {
@@ -296,27 +373,18 @@
   }
 
   async function getVipClients() {
-    const supabase = getSupabase();
-
     try {
-      const { data: clients, error } = await supabase
-        .from("clientes_vip")
-        .select("id,sucursal_id,notas,activo,fecha_alta,created_at,updated_at,contacto_id")
-        .order("fecha_alta", { ascending: false });
+      const clients = await fetchAllRows(
+        "clientes_vip",
+        "sucursal_id,notas,activo,fecha_alta,created_at,updated_at,contacto_id",
+        (q) => q.order("fecha_alta", { ascending: false })
+      );
 
-      if (error) {
-        logError("getVipClients(clientes_vip)", error);
-        return [];
-      }
-
-      const contactIds = (clients || [])
-        .map(c => c.contacto_id)
-        .filter(Boolean);
-
+      const contactIds = (clients || []).map(c => c.contacto_id).filter(Boolean);
       const contactsMap = await fetchManyByIds(
         "contactos",
         contactIds,
-        "id,nombre,telefono,email,identificacion,direccion,created_at,updated_at"
+        "nombre,telefono,email,identificacion,direccion,created_at,updated_at"
       );
 
       return (clients || []).map(client => {
@@ -342,8 +410,8 @@
     const clientIds = [...new Set((rows || []).map(r => r.cliente_vip_id).filter(Boolean))];
 
     const [usersMap, clientsMap] = await Promise.all([
-      fetchManyByIds("usuarios", userIds, "id,role,sucursal_id,contacto_id,created_at,updated_at"),
-      fetchManyByIds("clientes_vip", clientIds, "id,sucursal_id,notas,activo,fecha_alta,created_at,updated_at,contacto_id")
+      fetchManyByIds("usuarios", userIds, "role,sucursal_id,contacto_id,created_at,updated_at"),
+      fetchManyByIds("clientes_vip", clientIds, "sucursal_id,notas,activo,fecha_alta,created_at,updated_at,contacto_id")
     ]);
 
     const userContactIds = Object.values(usersMap).map(u => u.contacto_id).filter(Boolean);
@@ -351,13 +419,13 @@
     const userSucursalIds = Object.values(usersMap).map(u => u.sucursal_id).filter(Boolean);
 
     const [userContactsMap, clientContactsMap, sucursalesMap] = await Promise.all([
-      fetchManyByIds("contactos", userContactIds, "id,nombre,telefono,email,identificacion,direccion,created_at,updated_at"),
-      fetchManyByIds("contactos", clientContactIds, "id,nombre,telefono,email,identificacion,direccion,created_at,updated_at"),
-      fetchManyByIds("sucursales", userSucursalIds, "id,nombre,codigo,lat,lng,created_at,empresa_id")
+      fetchManyByIds("contactos", userContactIds, "nombre,telefono,email,identificacion,direccion,created_at,updated_at"),
+      fetchManyByIds("contactos", clientContactIds, "nombre,telefono,email,identificacion,direccion,created_at,updated_at"),
+      fetchManyByIds("sucursales", userSucursalIds, "nombre,codigo,lat,lng,created_at,empresa_id")
     ]);
 
     const empresaIds = [...new Set(Object.values(sucursalesMap).map(s => s.empresa_id).filter(Boolean))];
-    const empresasMap = await fetchManyByIds("empresa", empresaIds, "id,nombre");
+    const empresasMap = await fetchManyByIds("empresa", empresaIds, "nombre");
 
     return (rows || []).map(row => {
       const user = usersMap[row.usuario_id] || null;
@@ -385,12 +453,11 @@
   }
 
   async function getSalesBetween(startDate, endDate) {
-    const supabase = getSupabase();
-
     try {
+      const supabase = getSupabase();
       let query = supabase
         .from("ventas")
-        .select("id,usuario_id,subtotal,descuento,impuesto,total,metodo_pago,estado,observacion,created_at,cliente_vip_id,evento_id")
+        .select("usuario_id,subtotal,descuento,impuesto,total,metodo_pago,estado,observacion,created_at,cliente_vip_id,evento_id")
         .eq("estado", "finalizada")
         .order("created_at", { ascending: false });
 
@@ -424,22 +491,16 @@
   }
 
   async function getTopSeller() {
-    const supabase = getSupabase();
-
     try {
-      const { data, error } = await supabase
-        .from("ventas")
-        .select("usuario_id,subtotal,descuento,impuesto,total,created_at,estado")
-        .eq("estado", "finalizada");
-
-      if (error) {
-        logError("getTopSeller(ventas)", error);
-        return null;
-      }
+      const sales = await fetchAllRows(
+        "ventas",
+        "usuario_id,subtotal,descuento,impuesto,total,created_at,estado",
+        (q) => q.eq("estado", "finalizada")
+      );
 
       const grouped = new Map();
 
-      (data || []).forEach(row => {
+      (sales || []).forEach(row => {
         if (!row.usuario_id) return;
 
         const current = grouped.get(row.usuario_id) || {

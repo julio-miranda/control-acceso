@@ -15,35 +15,38 @@
         });
     }
 
-    async function getUserRole(userId) {
+    async function fetchRoleFromTable(tableName, userId, idColumn) {
         const supabase = getSupabase();
 
+        const { data, error } = await supabase
+            .from(tableName)
+            .select("role")
+            .eq(idColumn, userId)
+            .maybeSingle();
+
+        if (error) {
+            logError(`fetchRoleFromTable(${tableName}.${idColumn})`, error, { userId });
+            return null;
+        }
+
+        return data?.role ? String(data.role).toLowerCase() : null;
+    }
+
+    async function getUserRole(userId) {
         try {
-            let { data, error } = await supabase
-                .from("v_usuarios")
-                .select("role")
-                .eq("id", userId)
-                .maybeSingle();
+            let role = await fetchRoleFromTable("v_usuarios", userId, "id");
+            if (role) return role;
 
-            if (error) {
-                logError("getUserRole(v_usuarios)", error, { userId });
-            } else if (data?.role) {
-                return String(data.role).toLowerCase();
-            }
+            role = await fetchRoleFromTable("v_usuarios", userId, "usuarios_id");
+            if (role) return role;
 
-            ({ data, error } = await supabase
-                .from("usuarios")
-                .select("role")
-                .eq("id", userId)
-                .maybeSingle());
+            role = await fetchRoleFromTable("usuarios", userId, "id");
+            if (role) return role;
 
-            if (error) {
-                logError("getUserRole(usuarios)", error, { userId });
-            } else if (data?.role) {
-                return String(data.role).toLowerCase();
-            }
+            role = await fetchRoleFromTable("usuarios", userId, "usuarios_id");
+            if (role) return role;
 
-            const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+            const { data: sessionData, error: sessionError } = await getSupabase().auth.getSession();
             if (sessionError) {
                 logError("getUserRole(getSession)", sessionError, { userId });
             }
@@ -116,7 +119,6 @@
 
     async function signOut(options = {}) {
         const redirect = options.redirect !== false;
-
         const supabase = getSupabase();
 
         console.log("[AuthModel] Iniciando cierre de sesión...");
@@ -129,26 +131,20 @@
             } else {
                 console.log("[AuthModel] Sesión cerrada en Supabase");
             }
-
         } catch (err) {
             logError("signOut(catch)", err);
         }
 
         try {
-            // 🔴 limpiar posibles restos locales
             localStorage.clear();
             sessionStorage.clear();
-
             console.log("[AuthModel] Storage limpiado");
-
         } catch (err) {
             logError("signOut(clearStorage)", err);
         }
 
         if (redirect) {
             console.log("[AuthModel] Redirigiendo a index.html");
-
-            // 🔴 usar replace evita regresar con botón atrás
             window.location.replace("index.html");
         }
     }
