@@ -496,7 +496,7 @@
 
     let q = supabase
       .from("mesas")
-      .select("id,sucursal_id,numero,capacidad,estado,descripcion,created_at,updated_at")
+      .select("id:mesas_id,sucursal_id,numero,capacidad,estado,descripcion,created_at,updated_at")
       .order("numero", { ascending: true });
 
     if (sucursalId) {
@@ -576,7 +576,7 @@
         if (!mesaIds.length) return new Map();
         const { data: mesas, error: mError } = await supabase
           .from("mesas")
-          .select("id,sucursal_id,numero,capacidad,estado,descripcion,created_at,updated_at")
+          .select("id:mesas_id,sucursal_id,numero,capacidad,estado,descripcion,created_at,updated_at")
           .in("id", mesaIds);
 
         if (mError) throw mError;
@@ -777,7 +777,7 @@
     if (payload.mesa_id) {
       const { data, error } = await supabase
         .from("mesas")
-        .select("id,sucursal_id,numero,capacidad,estado,descripcion,created_at,updated_at")
+        .select("id:mesas_id,sucursal_id,numero,capacidad,estado,descripcion,created_at,updated_at")
         .eq("id", payload.mesa_id)
         .maybeSingle();
 
@@ -835,7 +835,7 @@
 
     const { data, error } = await supabase
       .from("mesas")
-      .select("id,sucursal_id,numero,capacidad,estado,descripcion,created_at,updated_at")
+      .select("id:mesas_id,sucursal_id,numero,capacidad,estado,descripcion,created_at,updated_at")
       .eq("id", rpcMesaId)
       .maybeSingle();
 
@@ -929,28 +929,50 @@
       return { ok: false, message: "No se pudo identificar la sucursal." };
     }
 
-    if (!payload?.numero) {
+    if (!payload?.numero || !String(payload.numero).trim()) {
       return { ok: false, message: "El número de mesa es obligatorio." };
     }
 
-    const { data, error } = await supabase
-      .from("mesas")
-      .insert([{
-        sucursal_id: sucursalId,
-        numero: String(payload.numero).trim(),
-        capacidad: numberOrZero(payload.capacidad) || 4,
-        estado: payload.estado || "disponible",
-        descripcion: normalizeText(payload.descripcion)
-      }])
-      .select("id,sucursal_id,numero,capacidad,estado,descripcion,created_at,updated_at")
-      .single();
+    try {
+      const { data: mesaId, error: rpcError } = await supabase.rpc("crear_mesa_app", {
+        p_sucursal_id: sucursalId,
+        p_numero: String(payload.numero).trim(),
+        p_capacidad: numberOrZero(payload.capacidad) || 4,
+        p_estado: payload.estado || "disponible",
+        p_descripcion: normalizeText(payload.descripcion)
+      });
 
-    if (error) throw error;
+      if (rpcError) throw rpcError;
 
-    const normalized = normalizeTable(data);
-    state.tablesCache.push(normalized);
+      if (!mesaId) {
+        return { ok: false, message: "No se pudo crear la mesa." };
+      }
 
-    return { ok: true, data: normalized };
+      const { data, error } = await supabase
+        .from("mesas")
+        .select("id:mesas_id,sucursal_id,numero,capacidad,estado,descripcion,created_at,updated_at")
+        .eq("mesas_id", mesaId)
+        .single();
+
+      if (error) throw error;
+
+      const normalized = normalizeTable({
+        id: data.id,
+        sucursal_id: data.sucursal_id,
+        numero: data.numero,
+        capacidad: data.capacidad,
+        estado: data.estado,
+        descripcion: data.descripcion,
+        created_at: data.created_at,
+        updated_at: data.updated_at
+      });
+
+      state.tablesCache.push(normalized);
+      return { ok: true, data: normalized };
+    } catch (error) {
+      console.error("createMesa error:", error);
+      return { ok: false, message: error.message || "No se pudo crear la mesa." };
+    }
   }
 
   function resolveMesaStateByReservationStatus(status) {
@@ -983,7 +1005,7 @@
     if (payload.mesa_id && String(payload.mesa_id) !== String(reservation.mesa_id || "")) {
       const { data, error } = await supabase
         .from("mesas")
-        .select("id,sucursal_id,numero,capacidad,estado,descripcion,created_at,updated_at")
+        .select("id:mesas_id,sucursal_id,numero,capacidad,estado,descripcion,created_at,updated_at")
         .eq("id", payload.mesa_id)
         .maybeSingle();
 

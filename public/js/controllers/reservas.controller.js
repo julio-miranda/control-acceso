@@ -652,21 +652,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const responsableIdentificacion = document.getElementById("eventResponsableIdentificacion")?.value?.trim() || "";
     const responsableDireccion = document.getElementById("eventResponsableDireccion")?.value?.trim() || "";
 
-    const payload = {
+    return {
       responsable_nombre: hasText(responsableNombre) ? responsableNombre : null,
       responsable_telefono: hasText(responsableTelefono) ? responsableTelefono : null,
       responsable_email: hasText(responsableEmail) ? responsableEmail : null,
       responsable_identificacion: hasText(responsableIdentificacion) ? responsableIdentificacion : null,
       responsable_direccion: hasText(responsableDireccion) ? responsableDireccion : null
-    };
-
-    const hasAny = Object.values(payload).some(v => hasText(v));
-    return hasAny ? payload : {
-      responsable_nombre: null,
-      responsable_telefono: null,
-      responsable_email: null,
-      responsable_identificacion: null,
-      responsable_direccion: null
     };
   }
 
@@ -826,6 +817,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     eventForm.addEventListener("submit", async (e) => {
       e.preventDefault();
+      e.stopPropagation();
       await handleCreateEvent();
     });
 
@@ -1115,11 +1107,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (reservationForm) {
       reservationForm.addEventListener("submit", async (e) => {
         e.preventDefault();
+        e.stopPropagation();
         await handleCreateReservation();
       });
     } else if (btnCreateReservation) {
       btnCreateReservation.addEventListener("click", async (e) => {
         e.preventDefault();
+        e.stopPropagation();
         await handleCreateReservation();
       });
     }
@@ -1154,100 +1148,136 @@ document.addEventListener("DOMContentLoaded", () => {
     toggleMesaWrapper();
   }
 
-  async function setupCreateTableSectionIfMissing() {
-    const tablesSectionExists = document.getElementById("mesaForm") || document.getElementById("tablesTable");
-    if (tablesSectionExists) return;
-
-    const dashboard = document.querySelector(".dashboard");
-    if (!dashboard) return;
-
-    const section = document.createElement("section");
-    section.className = "table-container";
-    section.style.marginBottom = "20px";
-    section.innerHTML = `
-      <h3>Agregar mesa</h3>
-      <form id="mesaForm" style="display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end;">
-        <div class="product-select-wrapper">
-          <label for="mesaNumero">Número de mesa</label>
-          <input id="mesaNumero" type="text" placeholder="Ej: 1, A-3, VIP-2">
-        </div>
-
-        <div class="qty-wrapper">
-          <label for="mesaCapacidad">Capacidad</label>
-          <input id="mesaCapacidad" type="number" min="1" value="4">
-        </div>
-
-        <div class="product-select-wrapper">
-          <label for="mesaEstado">Estado</label>
-          <select id="mesaEstado">
-            <option value="disponible">Disponible</option>
-            <option value="reservada">Reservada</option>
-            <option value="ocupada">Ocupada</option>
-            <option value="mantenimiento">Mantenimiento</option>
-          </select>
-        </div>
-
-        <div class="product-select-wrapper" style="flex:1; min-width:260px;">
-          <label for="mesaDescripcion">Descripción</label>
-          <input id="mesaDescripcion" type="text" placeholder="Descripción opcional">
-        </div>
-
-        <div style="display:flex; gap:10px; flex-wrap:wrap;">
-          <button id="btnCreateTable" class="btn-primary" type="submit">Guardar mesa</button>
-          <button id="btnClearMesa" class="btn-outline" type="button">Limpiar</button>
-        </div>
-      </form>
-    `;
-
-    dashboard.insertBefore(section, dashboard.children[2] || null);
-
-    const mesaForm = document.getElementById("mesaForm");
+  async function saveMesaFromForm() {
     const mesaNumero = document.getElementById("mesaNumero");
     const mesaCapacidad = document.getElementById("mesaCapacidad");
     const mesaEstado = document.getElementById("mesaEstado");
     const mesaDescripcion = document.getElementById("mesaDescripcion");
+
+    const numero = mesaNumero?.value?.trim() || "";
+    const capacidad = Number(mesaCapacidad?.value || 4);
+    const estado = mesaEstado?.value || "disponible";
+    const descripcion = mesaDescripcion?.value?.trim() || null;
+
+    if (!numero) {
+      Swal?.fire?.("Falta número", "El número de mesa es obligatorio.", "warning");
+      return;
+    }
+
+    try {
+      const result = await Model.createMesa({
+        numero,
+        capacidad,
+        estado,
+        descripcion
+      });
+
+      if (!result.ok) {
+        Swal?.fire?.("Error", result.message || "No se pudo crear la mesa.", "error");
+        return;
+      }
+
+      Swal?.fire?.("Listo", "Mesa creada correctamente.", "success");
+
+      if (mesaNumero) mesaNumero.value = "";
+      if (mesaCapacidad) mesaCapacidad.value = 4;
+      if (mesaEstado) mesaEstado.value = "disponible";
+      if (mesaDescripcion) mesaDescripcion.value = "";
+
+      await refreshDashboardData();
+    } catch (err) {
+      console.error("Error creando mesa:", err);
+      Swal?.fire?.("Error", err.message || "No se pudo crear la mesa.", "error");
+    }
+  }
+
+  function bindMesaForm() {
+    const mesaForm = document.getElementById("mesaForm");
+    const btnCreateTable = document.getElementById("btnCreateTable");
     const btnClearMesa = document.getElementById("btnClearMesa");
+
+    if (!mesaForm) return;
+
+    mesaForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      await saveMesaFromForm();
+    });
+
+    if (btnCreateTable) {
+      btnCreateTable.type = "button";
+      btnCreateTable.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        await saveMesaFromForm();
+      });
+    }
 
     if (btnClearMesa) {
       btnClearMesa.addEventListener("click", () => {
+        const mesaNumero = document.getElementById("mesaNumero");
+        const mesaCapacidad = document.getElementById("mesaCapacidad");
+        const mesaEstado = document.getElementById("mesaEstado");
+        const mesaDescripcion = document.getElementById("mesaDescripcion");
+
         if (mesaNumero) mesaNumero.value = "";
         if (mesaCapacidad) mesaCapacidad.value = 4;
         if (mesaEstado) mesaEstado.value = "disponible";
         if (mesaDescripcion) mesaDescripcion.value = "";
       });
     }
+  }
 
-    if (mesaForm) {
-      mesaForm.addEventListener("submit", async (e) => {
-        e.preventDefault();
+  async function setupCreateTableSectionIfMissing() {
+    const tablesSectionExists = document.getElementById("mesaForm") || document.getElementById("tablesTable");
 
-        try {
-          const result = await Model.createMesa({
-            numero: mesaNumero?.value?.trim() || "",
-            capacidad: Number(mesaCapacidad?.value || 4),
-            estado: mesaEstado?.value || "disponible",
-            descripcion: mesaDescripcion?.value?.trim() || null
-          });
+    if (!tablesSectionExists) {
+      const dashboard = document.querySelector(".dashboard");
+      if (!dashboard) return;
 
-          if (!result.ok) {
-            Swal?.fire?.("Error", result.message || "No se pudo crear la mesa.", "error");
-            return;
-          }
+      const section = document.createElement("section");
+      section.className = "table-container";
+      section.style.marginBottom = "20px";
+      section.id = "mesaFormSection";
+      section.innerHTML = `
+        <h3>Agregar mesa</h3>
+        <form id="mesaForm" style="display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end;">
+          <div class="product-select-wrapper">
+            <label for="mesaNumero">Número de mesa</label>
+            <input id="mesaNumero" type="text" placeholder="Ej: 1, A-3, VIP-2">
+          </div>
 
-          Swal?.fire?.("Listo", "Mesa creada correctamente.", "success");
+          <div class="qty-wrapper">
+            <label for="mesaCapacidad">Capacidad</label>
+            <input id="mesaCapacidad" type="number" min="1" value="4">
+          </div>
 
-          if (mesaNumero) mesaNumero.value = "";
-          if (mesaCapacidad) mesaCapacidad.value = 4;
-          if (mesaEstado) mesaEstado.value = "disponible";
-          if (mesaDescripcion) mesaDescripcion.value = "";
+          <div class="product-select-wrapper">
+            <label for="mesaEstado">Estado</label>
+            <select id="mesaEstado">
+              <option value="disponible">Disponible</option>
+              <option value="reservada">Reservada</option>
+              <option value="ocupada">Ocupada</option>
+              <option value="mantenimiento">Mantenimiento</option>
+            </select>
+          </div>
 
-          await refreshDashboardData();
-        } catch (err) {
-          console.error("Error creando mesa:", err);
-          Swal?.fire?.("Error", err.message || "No se pudo crear la mesa.", "error");
-        }
-      });
+          <div class="product-select-wrapper" style="flex:1; min-width:260px;">
+            <label for="mesaDescripcion">Descripción</label>
+            <input id="mesaDescripcion" type="text" placeholder="Descripción opcional">
+          </div>
+
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button id="btnCreateTable" class="btn-primary" type="button">Guardar mesa</button>
+            <button id="btnClearMesa" class="btn-outline" type="button">Limpiar</button>
+          </div>
+        </form>
+      `;
+
+      dashboard.insertBefore(section, dashboard.children[2] || null);
     }
+
+    bindMesaForm();
   }
 
   async function safeLogout(reason = "manual") {
