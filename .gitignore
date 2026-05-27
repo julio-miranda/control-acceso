@@ -68,3 +68,4 @@ pids
 # Archivos de bloqueo excluidos
 public/bloqueo.html
 public/js/blocker.js
+supabase/migrations

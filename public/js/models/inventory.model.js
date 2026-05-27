@@ -29,6 +29,7 @@
   }
 
   const LOW_STOCK_THRESHOLD = 5;
+  const RECIPE_SELECT = "recetas_id,sucursal_id,nombre,descripcion,rendimiento,activa,created_at,updated_at";
 
   const state = {
     productsCache: {},
@@ -179,8 +180,20 @@
   function normalizeId(row, table = "") {
     if (!row) return null;
 
+    const tableName = String(table || "").toLowerCase();
+    const singular = tableName.endsWith("s")
+      ? tableName.slice(0, -1)
+      : tableName;
+
     const candidates = [
       row.id,
+
+      // personalizados
+      row.recetas_id,
+      row.receta_detalle_id,
+      row.productos_preparados_id,
+      row.productos_insumo_id,
+
       row.producto_id,
       row.receta_id,
       row.usuario_id,
@@ -188,15 +201,20 @@
       row.contacto_id,
       row.sucursal_id,
       row.empresa_id,
-      row.cliente_vip_id
+      row.cliente_vip_id,
+
+      // automáticos
+      row[`${tableName}_id`],
+      row[`${singular}_id`]
     ];
 
-    const tableName = String(table || "").toLowerCase();
-    const singular = tableName.endsWith("s") ? tableName.slice(0, -1) : tableName;
-    candidates.push(row[`${tableName}_id`]);
-    candidates.push(row[`${singular}_id`]);
+    const found = candidates.find(
+      (v) =>
+        v !== undefined &&
+        v !== null &&
+        String(v).trim() !== ""
+    );
 
-    const found = candidates.find(v => v !== undefined && v !== null && String(v).trim() !== "");
     return found ?? null;
   }
 
@@ -943,7 +961,7 @@
       } else if (payload.tipo_producto === "trago_preparado") {
         // Vínculo se maneja al guardar la receta.
       } else if (payload.tipo_producto === "botella" || payload.tipo_producto === "servicio") {
-        await removeInsumoProduct(productId).catch(() => {});
+        await removeInsumoProduct(productId).catch(() => { });
       }
 
       const product = data || { id: productId, ...updatePayload };
@@ -1040,7 +1058,7 @@
   async function getRecipes() {
     try {
       const [recipes, preparedRows, productsRows] = await Promise.all([
-        fetchTableRows("recetas", "*"),
+        fetchTableRows("recetas", RECIPE_SELECT),
         fetchTableRows("productos_preparados", "*"),
         fetchTableRows("productos", "*")
       ]);
@@ -1064,7 +1082,8 @@
 
         return {
           ...r,
-          id: normalizeId(r, "recetas"),
+          id: recipeId,
+          recetas_id: recipeId,
           producto_id: productId,
           producto_nombre: productId && productMap[String(productId)] ? (productMap[String(productId)].nombre || "-") : "-"
         };
@@ -1129,7 +1148,7 @@
     }
   }
 
-    async function saveRowById(table, row, idField = "id") {
+  async function saveRowById(table, row, idField = "id") {
     const supabase = getSupabase();
     const payload = { ...row };
     const hasId = payload[idField] !== undefined && payload[idField] !== null && String(payload[idField]).trim() !== "";
@@ -1176,9 +1195,9 @@
       }
 
       return await saveRowById("productos_preparados", {
-        id: productId,
+        productos_preparados_id: productId,
         receta_id: recipeId
-      });
+      }, "productos_preparados_id");
     } catch (err) {
       logError("linkPreparedProduct", err, { productId, recipeId });
       throw err;
@@ -1192,7 +1211,7 @@
       const { error } = await supabase
         .from("productos_preparados")
         .delete()
-        .eq("id", productId);
+        .eq("productos_preparados_id", productId);
 
       if (error) {
         logError("unlinkPreparedProduct", error, { productId });
@@ -1213,9 +1232,9 @@
       }
 
       return await saveRowById("productos_insumo", {
-        id: productId,
+        productos_insumo_id: productId,
         unidad_medida: unidadMedida
-      });
+      }, "productos_insumo_id");
     } catch (err) {
       logError("upsertInsumoProduct", err, { productId, unidadMedida });
       throw err;
@@ -1229,7 +1248,7 @@
       const { error } = await supabase
         .from("productos_insumo")
         .delete()
-        .eq("id", productId);
+        .eq("productos_insumo_id", productId);
 
       if (error) {
         logError("removeInsumoProduct", error, { productId });
@@ -1247,7 +1266,7 @@
     try {
       const [links, recipes] = await Promise.all([
         fetchTableRows("productos_preparados", "*"),
-        fetchTableRows("recetas", "*")
+        fetchTableRows("recetas", RECIPE_SELECT)
       ]);
 
       const link = (links || []).find(
@@ -1262,9 +1281,12 @@
 
       if (!recipe) return null;
 
+      const recipeId = normalizeId(recipe, "recetas");
+
       return {
         ...recipe,
-        id: normalizeId(recipe, "recetas"),
+        id: recipeId,
+        recetas_id: recipeId,
         producto_id: productId
       };
     } catch (e) {
@@ -1274,28 +1296,116 @@
   }
 
   async function upsertRecipe(recipe) {
+    const supabase = getSupabase();
+
     try {
+      const existingRecipeId = recipe.recetas_id || recipe.id || null;
       const payload = {
-        sucursal_id: recipe.sucursal_id ?? state.context?.sucursalId ?? global.adminSucursal ?? null,
+        sucursal_id:
+          recipe.sucursal_id ??
+          state.context?.sucursalId ??
+          global.adminSucursal ??
+          null,
+
         nombre: recipe.nombre,
         descripcion: recipe.descripcion || null,
         rendimiento: Number(recipe.rendimiento || 1) || 1,
         activa: recipe.activa !== false
       };
 
-      if (recipe.id) {
-        payload.id = recipe.id;
+      let query;
+
+      // UPDATE
+      if (existingRecipeId) {
+        query = supabase
+          .from("recetas")
+          .update(payload)
+          .eq("recetas_id", existingRecipeId);
       }
 
-      const saved = await saveRowById("recetas", payload, "id");
-
-      if (recipe.producto_id) {
-        await linkPreparedProduct(recipe.producto_id, saved?.id || recipe.id);
+      // INSERT
+      else {
+        query = supabase
+          .from("recetas")
+          .insert(payload);
       }
 
-      return saved;
+      const { data, error } = await query
+        .select(RECIPE_SELECT)
+        .maybeSingle();
+
+      if (error) {
+        logError("upsertRecipe", error, { payload });
+        throw error;
+      }
+
+      const recipeId =
+        normalizeId(data, "recetas") ||
+        existingRecipeId;
+
+      if (recipe.producto_id && recipeId) {
+        await linkPreparedProduct(
+          recipe.producto_id,
+          recipeId
+        );
+      }
+
+      return {
+        ...data,
+        id: recipeId,
+        recetas_id: recipeId
+      };
+
     } catch (e) {
       console.error("upsertRecipe error:", e);
+      throw e;
+    }
+  }
+
+  async function saveRecipeWithDetails(recipe, detalles = []) {
+    const supabase = getSupabase();
+
+    try {
+      const recipeId = recipe.recetas_id || recipe.id || null;
+      const sucursalId =
+        recipe.sucursal_id ??
+        state.context?.sucursalId ??
+        global.adminSucursal ??
+        null;
+
+      const payload = {
+        p_receta_id: recipeId,
+        p_sucursal_id: sucursalId,
+        p_producto_id: recipe.producto_id || null,
+        p_nombre: recipe.nombre,
+        p_descripcion: recipe.descripcion || null,
+        p_rendimiento: Number(recipe.rendimiento || 1) || 1,
+        p_activa: recipe.activa !== false,
+        p_detalles: (detalles || []).map((d) => ({
+          insumo_id: d.insumo_id,
+          cantidad: Number(d.cantidad || 0) || 0,
+          desperdicio: Number(d.desperdicio || 0) || 0
+        }))
+      };
+
+      const { data, error } = await supabase.rpc("guardar_receta_app", payload);
+
+      if (error) {
+        logError("saveRecipeWithDetails", error, { payload });
+        throw error;
+      }
+
+      const saved = Array.isArray(data) ? data[0] : data;
+      const savedId = saved?.id || saved?.recetas_id || recipeId;
+
+      return {
+        ...saved,
+        id: savedId,
+        recetas_id: savedId,
+        producto_id: recipe.producto_id || saved?.producto_id || null
+      };
+    } catch (e) {
+      console.error("saveRecipeWithDetails error:", e);
       throw e;
     }
   }
@@ -1343,7 +1453,7 @@
       const { error } = await supabase
         .from("recetas")
         .delete()
-        .eq("id", recipeId);
+        .eq("recetas_id", recipeId);
 
       if (error) throw error;
       return true;
@@ -1601,7 +1711,7 @@
         }))
       };
 
-      const { data, error } = await supabase.rpc("registrar_venta", payload);
+      const { data, error } = await supabase.rpc("registrar_venta_app", payload);
 
       if (error) {
         throw error;
@@ -1639,6 +1749,7 @@
     getRecipeByProductId,
     getRecipeDetails,
     upsertRecipe,
+    saveRecipeWithDetails,
     replaceRecipeDetails,
     deleteRecipe,
     linkPreparedProduct,

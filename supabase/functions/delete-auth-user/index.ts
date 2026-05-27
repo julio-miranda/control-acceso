@@ -1,3 +1,4 @@
+//supabase/functions/delete-auth-user/index.ts
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
@@ -207,7 +208,7 @@ async function getRequesterRole(admin: SupabaseAdminClient, userId: string): Pro
   const { data, error } = await admin
     .from("usuarios")
     .select("role")
-    .eq("id", userId)
+    .eq("usuarios_id", userId)
     .maybeSingle();
 
   if (error) {
@@ -252,7 +253,7 @@ async function findContactByUniqueFields(admin: SupabaseAdminClient, contactData
   if (contactData.email) {
     const { data, error } = await admin
       .from("contactos")
-      .select("id")
+      .select("id:contactos_id")
       .eq("email", contactData.email)
       .maybeSingle();
 
@@ -263,7 +264,7 @@ async function findContactByUniqueFields(admin: SupabaseAdminClient, contactData
   if (contactData.identificacion) {
     const { data, error } = await admin
       .from("contactos")
-      .select("id")
+      .select("id:contactos_id")
       .eq("identificacion", contactData.identificacion)
       .maybeSingle();
 
@@ -301,7 +302,7 @@ async function upsertContact(
     const { error } = await admin
       .from("contactos")
       .update(payload)
-      .eq("id", preferredContactId);
+      .eq("contactos_id", preferredContactId);
 
     if (error) throw error;
     return preferredContactId;
@@ -316,7 +317,7 @@ async function upsertContact(
     const { error } = await admin
       .from("contactos")
       .update(payload)
-      .eq("id", existingId);
+      .eq("contactos_id", existingId);
 
     if (error) throw error;
     return existingId;
@@ -325,7 +326,7 @@ async function upsertContact(
   const { data: inserted, error: insertError } = await admin
     .from("contactos")
     .insert([payload])
-    .select("id")
+    .select("id:contactos_id")
     .single();
 
   if (insertError) throw insertError;
@@ -335,11 +336,11 @@ async function upsertContact(
 
 async function cleanupOnFailure(admin: SupabaseAdminClient, userId?: string | null, contactoId?: string | null) {
   if (contactoId) {
-    await admin.from("contactos").delete().eq("id", contactoId).catch(() => null);
+    await admin.from("contactos").delete().eq("contactos_id", contactoId).catch(() => null);
   }
 
   if (userId) {
-    await admin.from("usuarios").delete().eq("id", userId).catch(() => null);
+    await admin.from("usuarios").delete().eq("usuarios_id", userId).catch(() => null);
     await admin.from("usuario_jornadas").delete().eq("usuario_id", userId).catch(() => null);
     await admin.auth.admin.deleteUser(userId).catch(() => null);
   }
@@ -399,8 +400,8 @@ Deno.serve(async (req) => {
 
       const { data: sucursalRow, error: sucursalError } = await admin
         .from("sucursales")
-        .select("id, nombre, codigo, empresa_id")
-        .eq("id", sucursalId)
+        .select("id:sucursales_id, nombre, codigo, empresa_id")
+        .eq("sucursales_id", sucursalId)
         .maybeSingle();
 
       if (sucursalError) {
@@ -463,7 +464,7 @@ Deno.serve(async (req) => {
         contactoId = await upsertContact(admin, contactData, null);
 
         const usuarioRow = {
-          id: userId,
+          usuarios_id: userId,
           contacto_id: contactoId,
           nacimiento: extraData.nacimiento,
           identificacion_nombre: extraData.identificacion_nombre,
@@ -477,7 +478,7 @@ Deno.serve(async (req) => {
 
         const { error: upsertError } = await admin
           .from("usuarios")
-          .upsert([usuarioRow], { onConflict: "id" });
+          .upsert([usuarioRow], { onConflict: "usuarios_id" });
 
         if (upsertError) {
           await cleanupOnFailure(admin, userId, contactoId);
@@ -525,8 +526,8 @@ Deno.serve(async (req) => {
 
       const { data: currentUserRow, error: currentUserError } = await admin
         .from("usuarios")
-        .select("id, contacto_id, sucursal_id, role")
-        .eq("id", userId)
+        .select("id:usuarios_id, contacto_id, sucursal_id, role")
+        .eq("usuarios_id", userId)
         .maybeSingle();
 
       if (currentUserError) {
@@ -553,8 +554,8 @@ Deno.serve(async (req) => {
 
       const { data: sucursalRow, error: sucursalError } = await admin
         .from("sucursales")
-        .select("id, nombre, codigo, empresa_id")
-        .eq("id", finalSucursalId)
+        .select("id:sucursales_id, nombre, codigo, empresa_id")
+        .eq("sucursales_id", finalSucursalId)
         .maybeSingle();
 
       if (sucursalError) {
@@ -606,7 +607,7 @@ Deno.serve(async (req) => {
         const contactoId = await upsertContact(admin, contactData, currentUserRow.contacto_id || null);
 
         const usuarioRow = {
-          id: userId,
+          usuarios_id: userId,
           contacto_id: contactoId,
           nacimiento: updatedExtraData.nacimiento,
           identificacion_nombre: updatedExtraData.identificacion_nombre,
@@ -620,7 +621,7 @@ Deno.serve(async (req) => {
 
         const { error: upsertError } = await admin
           .from("usuarios")
-          .upsert([usuarioRow], { onConflict: "id" });
+          .upsert([usuarioRow], { onConflict: "usuarios_id" });
 
         if (upsertError) {
           return json({ error: upsertError.message }, 400);
@@ -655,8 +656,8 @@ Deno.serve(async (req) => {
 
     const { data: usuarioActual, error: usuarioActualError } = await admin
       .from("usuarios")
-      .select("id, contacto_id")
-      .eq("id", userId)
+      .select("id:usuarios_id, contacto_id")
+      .eq("usuarios_id", userId)
       .maybeSingle();
 
     if (usuarioActualError) {
@@ -677,7 +678,7 @@ Deno.serve(async (req) => {
     const { error: usuarioError } = await admin
       .from("usuarios")
       .delete()
-      .eq("id", userId);
+      .eq("usuarios_id", userId);
 
     if (usuarioError) {
       return json({ error: usuarioError.message }, 400);
@@ -693,7 +694,7 @@ Deno.serve(async (req) => {
       await admin
         .from("contactos")
         .delete()
-        .eq("id", contactoId)
+        .eq("contactos_id", contactoId)
         .catch(() => null);
     }
 

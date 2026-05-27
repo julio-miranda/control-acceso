@@ -687,7 +687,7 @@
       const ctx = typeof model.getContext === "function" ? model.getContext() : {};
 
       const recipePayload = {
-        id: currentRecipe?.id || undefined,
+        recetas_id: currentRecipe?.recetas_id || currentRecipe?.id || undefined,
         sucursal_id: currentRecipe?.sucursal_id || product?.sucursal_id || ctx.sucursalId,
         producto_id: linkedProductId,
         nombre,
@@ -696,11 +696,15 @@
         activa
       };
 
-      const savedRecipe = await model.upsertRecipe(recipePayload);
+      const savedRecipe = typeof model.saveRecipeWithDetails === "function"
+        ? await model.saveRecipeWithDetails(recipePayload, detalles)
+        : await model.upsertRecipe(recipePayload);
       if (!savedRecipe?.id) throw new Error("No se pudo guardar la receta.");
 
-      await model.replaceRecipeDetails(savedRecipe.id, detalles);
-      await model.linkPreparedProduct(linkedProductId, savedRecipe.id);
+      if (typeof model.saveRecipeWithDetails !== "function") {
+        await model.replaceRecipeDetails(savedRecipe.id, detalles);
+        await model.linkPreparedProduct(linkedProductId, savedRecipe.id);
+      }
 
       notifySuccess("Receta guardada");
       await refreshRecipes();

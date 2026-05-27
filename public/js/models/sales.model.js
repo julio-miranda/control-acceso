@@ -123,7 +123,8 @@
       costo_promedio: Number(getValue(row, ["costo_promedio"], 0)) || 0,
       activo: Boolean(getValue(row, ["activo"], true)),
       sucursal_id: getValue(row, ["sucursal_id"], null),
-      receta_id: getValue(extra, ["receta_id"], null)
+      receta_id: getValue(extra, ["receta_id"], null),
+      recipe_details: Array.isArray(extra.recipe_details) ? extra.recipe_details : []
     };
   }
 
@@ -414,6 +415,27 @@
     return stockMap;
   }
 
+  function calculatePreparedAvailability(recipe, details, stockMap) {
+    const rendimiento = Math.max(0, Number(recipe?.rendimiento || 1) || 1);
+    const ingredients = Array.isArray(details) ? details : [];
+
+    if (!rendimiento || !ingredients.length) return 0;
+
+    let maxUnits = Infinity;
+
+    ingredients.forEach((detail) => {
+      const insumoId = detail.insumo_id;
+      const perRecipe = Number(detail.cantidad || 0) + Number(detail.desperdicio || 0);
+      if (!insumoId || perRecipe <= 0) return;
+
+      const perUnit = perRecipe / rendimiento;
+      const available = Number(stockMap[insumoId] || 0);
+      maxUnits = Math.min(maxUnits, Math.floor(available / perUnit));
+    });
+
+    return Number.isFinite(maxUnits) ? Math.max(0, maxUnits) : 0;
+  }
+
   async function loadProducts() {
     const supabase = getSupabase();
 
@@ -437,14 +459,14 @@
         ids.length
           ? supabase
               .from("productos_insumo")
-              .select("id,unidad_medida")
-              .in("id", ids)
+              .select("productos_insumo_id,unidad_medida")
+              .in("productos_insumo_id", ids)
           : Promise.resolve({ data: [], error: null }),
         ids.length
           ? supabase
               .from("productos_preparados")
-              .select("id,receta_id")
-              .in("id", ids)
+              .select("productos_preparados_id,receta_id")
+              .in("productos_preparados_id", ids)
           : Promise.resolve({ data: [], error: null })
       ]);
 
@@ -453,13 +475,45 @@
       if (preparadosRes.error) console.warn("loadProducts(productos_preparados):", preparadosRes.error);
 
       const stockMap = aggregateStockFromMovements(movRes.data || []);
-      const insumoMap = Object.fromEntries((insumoRes.data || []).map((r) => [r.id, r]));
-      const preparadosMap = Object.fromEntries((preparadosRes.data || []).map((r) => [r.id, r]));
+      const insumoMap = Object.fromEntries((insumoRes.data || []).map((r) => [r.productos_insumo_id, r]));
+      const preparadosMap = Object.fromEntries((preparadosRes.data || []).map((r) => [r.productos_preparados_id, r]));
+      const recipeIds = [...new Set((preparadosRes.data || []).map((r) => r.receta_id).filter(Boolean))];
+      const [recipesRes, recipeDetailsRes] = await Promise.all([
+        recipeIds.length
+          ? supabase
+              .from("recetas")
+              .select("recetas_id,rendimiento,activa")
+              .in("recetas_id", recipeIds)
+          : Promise.resolve({ data: [], error: null }),
+        recipeIds.length
+          ? supabase
+              .from("receta_detalle")
+              .select("receta_detalle_id,receta_id,insumo_id,cantidad,desperdicio")
+              .in("receta_id", recipeIds)
+          : Promise.resolve({ data: [], error: null })
+      ]);
+
+      if (recipesRes.error) console.warn("loadProducts(recetas):", recipesRes.error);
+      if (recipeDetailsRes.error) console.warn("loadProducts(receta_detalle):", recipeDetailsRes.error);
+
+      const recipeMap = Object.fromEntries((recipesRes.data || []).map((r) => [r.recetas_id || r.id, r]));
+      const recipeDetailsByRecipe = {};
+      (recipeDetailsRes.data || []).forEach((detail) => {
+        const recipeId = detail.receta_id;
+        if (!recipeId) return;
+        if (!recipeDetailsByRecipe[recipeId]) recipeDetailsByRecipe[recipeId] = [];
+        recipeDetailsByRecipe[recipeId].push(detail);
+      });
 
       state.productsCache = {};
       (baseProducts || []).forEach((row) => {
         const isPrepared = Boolean(preparadosMap[row.id]);
         const isInsumo = Boolean(insumoMap[row.id]);
+        const recipeId = preparadosMap[row.id]?.receta_id || null;
+        const recipeDetails = recipeDetailsByRecipe[recipeId] || [];
+        const preparedStock = isPrepared
+          ? calculatePreparedAvailability(recipeMap[recipeId], recipeDetails, stockMap)
+          : null;
 
         const tipo_producto = isPrepared
           ? "trago_preparado"
@@ -468,10 +522,11 @@
             : "botella";
 
         const extra = {
-          stock: stockMap[row.id] || 0,
+          stock: isPrepared ? preparedStock : (stockMap[row.id] || 0),
           tipo_producto,
           unidad_medida: insumoMap[row.id]?.unidad_medida || "unidad",
-          receta_id: preparadosMap[row.id]?.receta_id || null
+          receta_id: recipeId,
+          recipe_details: recipeDetails
         };
 
         const p = normalizeProduct(row, extra);
@@ -554,13 +609,16 @@
       let details = [];
       const { data: detailsData, error: detailsError } = await supabase
         .from("venta_detalle")
-        .select("id,venta_id,producto_id,cantidad,precio_unitario,total_linea,costo_unitario,costo_total,receta_id")
+        .select("id,venta_id,producto_id,cantidad,precio_unitario,total_linea,costo_unitario,receta_id")
         .in("venta_id", saleIds);
 
       if (detailsError) {
         console.warn("No fue posible cargar venta_detalle:", detailsError);
       } else {
-        details = Array.isArray(detailsData) ? detailsData : [];
+        details = (Array.isArray(detailsData) ? detailsData : []).map((detail) => ({
+          ...detail,
+          costo_total: Number(detail.costo_unitario || 0) * Number(detail.cantidad || 0)
+        }));
       }
 
       const prodIds = [...new Set(details.map((d) => d.producto_id).filter(Boolean))];
@@ -1133,7 +1191,7 @@
     };
 
     const supabase = getSupabase();
-    const { data, error } = await supabase.rpc("registrar_venta", payload);
+    const { data, error } = await supabase.rpc("registrar_venta_app", payload);
 
     if (error) {
       throw error;
