@@ -81,6 +81,17 @@ document.addEventListener("DOMContentLoaded", () => {
       : Model.currency(value);
   }
 
+  function hasText(value) {
+    return String(value ?? "").trim().length > 0;
+  }
+
+  function toIsoFromDatetimeLocal(value) {
+    if (!hasText(value)) return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toISOString();
+  }
+
   function setupMenu() {
     if (!menuToggle || !navLinks) return;
 
@@ -573,23 +584,32 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const neededPeople = Number(peopleCount.value || 1);
-    const result = await Model.loadAvailableTablesForEvent(eventSelect.value, neededPeople);
-    const tables = result?.tables || [];
 
-    if (!tables.length) {
+    try {
+      const result = await Model.loadAvailableTablesForEvent(eventSelect.value, neededPeople);
+      const tables = result?.tables || [];
+
+      if (!tables.length) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "No hay mesas disponibles";
+        mesaSelect.appendChild(opt);
+        return;
+      }
+
+      tables.forEach(mesa => {
+        const opt = document.createElement("option");
+        opt.value = mesa.id;
+        opt.textContent = `Mesa ${mesa.numero} · Capacidad ${mesa.capacidad}`;
+        mesaSelect.appendChild(opt);
+      });
+    } catch (err) {
+      console.error("Error cargando mesas disponibles:", err);
       const opt = document.createElement("option");
       opt.value = "";
-      opt.textContent = "No hay mesas disponibles";
+      opt.textContent = "Error cargando mesas";
       mesaSelect.appendChild(opt);
-      return;
     }
-
-    tables.forEach(mesa => {
-      const opt = document.createElement("option");
-      opt.value = mesa.id;
-      opt.textContent = `Mesa ${mesa.numero} · Capacidad ${mesa.capacidad}`;
-      mesaSelect.appendChild(opt);
-    });
   }
 
   function toggleMesaWrapper() {
@@ -623,6 +643,31 @@ document.addEventListener("DOMContentLoaded", () => {
     if (email && !email.value.trim()) email.value = vip.email || "";
     if (identificacion && !identificacion.value.trim()) identificacion.value = vip.identificacion || "";
     if (direccion && !direccion.value.trim()) direccion.value = vip.direccion || "";
+  }
+
+  function collectResponsiblePayload() {
+    const responsableNombre = document.getElementById("eventResponsableNombre")?.value?.trim() || "";
+    const responsableTelefono = document.getElementById("eventResponsableTelefono")?.value?.trim() || "";
+    const responsableEmail = document.getElementById("eventResponsableEmail")?.value?.trim() || "";
+    const responsableIdentificacion = document.getElementById("eventResponsableIdentificacion")?.value?.trim() || "";
+    const responsableDireccion = document.getElementById("eventResponsableDireccion")?.value?.trim() || "";
+
+    const payload = {
+      responsable_nombre: hasText(responsableNombre) ? responsableNombre : null,
+      responsable_telefono: hasText(responsableTelefono) ? responsableTelefono : null,
+      responsable_email: hasText(responsableEmail) ? responsableEmail : null,
+      responsable_identificacion: hasText(responsableIdentificacion) ? responsableIdentificacion : null,
+      responsable_direccion: hasText(responsableDireccion) ? responsableDireccion : null
+    };
+
+    const hasAny = Object.values(payload).some(v => hasText(v));
+    return hasAny ? payload : {
+      responsable_nombre: null,
+      responsable_telefono: null,
+      responsable_email: null,
+      responsable_identificacion: null,
+      responsable_direccion: null
+    };
   }
 
   function getReservationFormValues() {
@@ -693,19 +738,28 @@ document.addEventListener("DOMContentLoaded", () => {
     const entradaGratis = document.getElementById("eventEntradaGratis")?.value === "1";
 
     const responsableVipId = document.getElementById("eventResponsableVip")?.value || "";
-    const responsableNombre = document.getElementById("eventResponsableNombre")?.value?.trim() || "";
-    const responsableTelefono = document.getElementById("eventResponsableTelefono")?.value?.trim() || "";
-    const responsableEmail = document.getElementById("eventResponsableEmail")?.value?.trim() || "";
-    const responsableIdentificacion = document.getElementById("eventResponsableIdentificacion")?.value?.trim() || "";
-    const responsableDireccion = document.getElementById("eventResponsableDireccion")?.value?.trim() || "";
+    const responsablePayload = collectResponsiblePayload();
 
-    if (!nombre) {
+    if (!hasText(nombre)) {
       Swal?.fire?.("Falta nombre", "Escribe el nombre del evento.", "warning");
       return;
     }
 
-    if (!fechaInicioRaw) {
+    if (!hasText(fechaInicioRaw)) {
       Swal?.fire?.("Falta fecha", "Selecciona la fecha de inicio.", "warning");
+      return;
+    }
+
+    const fechaInicioISO = toIsoFromDatetimeLocal(fechaInicioRaw);
+    const fechaFinISO = fechaFinRaw ? toIsoFromDatetimeLocal(fechaFinRaw) : null;
+
+    if (!fechaInicioISO) {
+      Swal?.fire?.("Fecha inválida", "La fecha de inicio no es válida.", "warning");
+      return;
+    }
+
+    if (fechaFinRaw && !fechaFinISO) {
+      Swal?.fire?.("Fecha inválida", "La fecha de fin no es válida.", "warning");
       return;
     }
 
@@ -715,20 +769,20 @@ document.addEventListener("DOMContentLoaded", () => {
         nombre,
         tipo,
         descripcion,
-        fecha_inicio: new Date(fechaInicioRaw).toISOString(),
-        fecha_fin: fechaFinRaw ? new Date(fechaFinRaw).toISOString() : null,
+        fecha_inicio: fechaInicioISO,
+        fecha_fin: fechaFinISO,
         capacidad,
         precio_entrada: precioEntrada,
         estado,
         requiere_reservacion: requiereReservacion,
         es_gratuito: esGratuito,
         entrada_gratis: entradaGratis,
-        responsable_vip_id: responsableVipId || null,
-        responsable_nombre: responsableNombre,
-        responsable_telefono: responsableTelefono,
-        responsable_email: responsableEmail,
-        responsable_identificacion: responsableIdentificacion,
-        responsable_direccion: responsableDireccion,
+        responsable_vip_id: hasText(responsableVipId) ? responsableVipId : null,
+        responsable_nombre: responsablePayload.responsable_nombre,
+        responsable_telefono: responsablePayload.responsable_telefono,
+        responsable_email: responsablePayload.responsable_email,
+        responsable_identificacion: responsablePayload.responsable_identificacion,
+        responsable_direccion: responsablePayload.responsable_direccion,
         creado_por_usuario_id: currentUser?.id || null
       });
 
@@ -1220,6 +1274,13 @@ document.addEventListener("DOMContentLoaded", () => {
       ensureEventFormSection();
       bindEventForm();
       await setupCreateTableSectionIfMissing();
+
+      if (logoutBtn) {
+        logoutBtn.addEventListener("click", async (e) => {
+          e.preventDefault();
+          await safeLogout("manual");
+        });
+      }
 
       const currentUser = await Model.bootstrapAuth();
 
