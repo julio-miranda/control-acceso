@@ -90,9 +90,7 @@
   }
 
   function normalizeRole(role) {
-    return String(role || "")
-      .trim()
-      .toLowerCase();
+    return String(role || "").trim().toLowerCase();
   }
 
   function isAdminRole(role) {
@@ -154,12 +152,7 @@
         .eq("id", uid)
         .maybeSingle();
 
-      if (error) {
-        console.error("Error cargando usuario:", error);
-        return null;
-      }
-
-      if (!data) return null;
+      if (error || !data) return null;
 
       return {
         id: data.id || uid,
@@ -276,9 +269,19 @@
     }
   }
 
+  function getTypeLabel(tipo) {
+    switch (String(tipo || "").toLowerCase()) {
+      case "insumo": return "Insumo";
+      case "botella": return "Botella";
+      case "trago_preparado": return "Trago preparado";
+      case "servicio": return "Servicio";
+      default: return "Producto";
+    }
+  }
+
   function renderProductOptions(selectedId = "") {
     return (state.productsList || [])
-      .map(p => {
+      .map((p) => {
         const selected = String(p.id) === String(selectedId) ? "selected" : "";
         return `<option value="${escapeHtml(p.id)}" ${selected}>${escapeHtml(p.nombre)} (${getTypeLabel(p.tipo_producto)})</option>`;
       })
@@ -296,14 +299,14 @@
     if (el.totalValueCard) el.totalValueCard.textContent = formatCurrency(totalValue);
 
     if (el.lowStockCard) {
-      el.lowStockCard.textContent = (products || []).filter(p => Number(p.stock || 0) <= model.LOW_STOCK_THRESHOLD).length;
+      el.lowStockCard.textContent = (products || []).filter((p) => Number(p.stock || 0) <= model.LOW_STOCK_THRESHOLD).length;
     }
   }
 
   function renderLowStock(products) {
     if (!el.lowStockPanel) return;
 
-    const low = (products || []).filter(p => Number(p.stock || 0) <= model.LOW_STOCK_THRESHOLD);
+    const low = (products || []).filter((p) => Number(p.stock || 0) <= model.LOW_STOCK_THRESHOLD);
 
     if (!low.length) {
       el.lowStockPanel.style.display = "none";
@@ -328,27 +331,17 @@
     query = (query || "").toLowerCase();
     const rows = Array.from(el.tbody.querySelectorAll("tr"));
 
-    rows.forEach(row => {
+    rows.forEach((row) => {
       const cells = row.querySelectorAll("td");
       if (!cells.length) return;
 
       const text = Array.from(cells)
         .slice(0, 5)
-        .map(c => c.textContent.toLowerCase())
+        .map((c) => c.textContent.toLowerCase())
         .join(" ");
 
       row.style.display = (!query || text.includes(query)) ? "" : "none";
     });
-  }
-
-  function getTypeLabel(tipo) {
-    switch (String(tipo || "").toLowerCase()) {
-      case "insumo": return "Insumo";
-      case "botella": return "Botella";
-      case "trago_preparado": return "Trago preparado";
-      case "servicio": return "Servicio";
-      default: return "Producto";
-    }
   }
 
   function buildProductRow(p, forecastMap) {
@@ -458,11 +451,8 @@
 
   async function loadRecipeProductsList() {
     try {
-      const rows = await model.fetchProductsRows();
-      state.recipeProducts = (rows || [])
-        .map(r => model.normalizeProduct(r))
-        .filter(p => String(p.tipo_producto || "").toLowerCase() !== "servicio");
-
+      await ensureProductsList();
+      state.recipeProducts = (state.productsList || []).filter((p) => String(p.tipo_producto || "").toLowerCase() !== "servicio");
       return state.recipeProducts;
     } catch (e) {
       console.warn("loadRecipeProductsList error:", e);
@@ -529,7 +519,7 @@
 
   function renderRecipeIngredientOptions(selectedValue = "") {
     return (state.recipeProducts || [])
-      .map(p => {
+      .map((p) => {
         const selected = String(p.id) === String(selectedValue) ? "selected" : "";
         return `<option value="${escapeHtml(p.id)}" ${selected}>${escapeHtml(p.nombre)} (${getTypeLabel(p.tipo_producto)})</option>`;
       })
@@ -576,7 +566,7 @@
     const linkedProductId = currentRecipe?.producto_id || product?.id || "";
     const linkedProductName =
       product?.nombre ||
-      state.productsList.find(p => String(p.id) === String(linkedProductId))?.nombre ||
+      state.productsList.find((p) => String(p.id) === String(linkedProductId))?.nombre ||
       currentRecipe?.producto_nombre ||
       "Producto final";
 
@@ -632,7 +622,7 @@
         if (!container || !addBtn) return;
 
         const initialRows = existingDetails.length ? existingDetails : [null];
-        initialRows.forEach(d => container.appendChild(makeIngredientRow(d || {})));
+        initialRows.forEach((d) => container.appendChild(makeIngredientRow(d || {})));
 
         addBtn.addEventListener("click", () => {
           container.appendChild(makeIngredientRow({ cantidad: 0, desperdicio: 0 }));
@@ -646,12 +636,12 @@
         const rows = Array.from(document.querySelectorAll("#recipe-details .recipe-row"));
 
         const detalles = rows
-          .map(row => ({
+          .map((row) => ({
             insumo_id: row.querySelector(".recipe-insumo")?.value || "",
             cantidad: Number(row.querySelector(".recipe-cantidad")?.value || 0) || 0,
             desperdicio: Number(row.querySelector(".recipe-desperdicio")?.value || 0) || 0
           }))
-          .filter(d => d.insumo_id);
+          .filter((d) => d.insumo_id);
 
         return { nombre, descripcion, rendimiento, activa, detalles };
       }
@@ -699,6 +689,7 @@
       const savedRecipe = typeof model.saveRecipeWithDetails === "function"
         ? await model.saveRecipeWithDetails(recipePayload, detalles)
         : await model.upsertRecipe(recipePayload);
+
       if (!savedRecipe?.id) throw new Error("No se pudo guardar la receta.");
 
       if (typeof model.saveRecipeWithDetails !== "function") {
@@ -857,7 +848,7 @@
         if (existingSelect) {
           existingSelect.addEventListener("change", () => {
             const productId = existingSelect.value;
-            const product = state.productsList.find(p => String(p.id) === String(productId));
+            const product = state.productsList.find((p) => String(p.id) === String(productId));
             if (product) {
               fillFromProduct(product);
               if (modeSelect) modeSelect.value = "existing";
@@ -886,7 +877,7 @@
 
     try {
       if (v.mode === "existing" && v.existing_product_id) {
-        const existing = state.productsList.find(p => String(p.id) === String(v.existing_product_id));
+        const existing = state.productsList.find((p) => String(p.id) === String(v.existing_product_id));
 
         if (!existing) {
           notifyError("No se encontró el producto existente.");
@@ -901,7 +892,8 @@
         const updatedPayload = {
           nombre: v.nombre || existing.nombre,
           precio: Number(v.precio || existing.precio || 0),
-          costo_promedio: Number(v.costo_promedio || existing.costo_promedio || 0)
+          costo_promedio: Number(v.costo_promedio || existing.costo_promedio || 0),
+          tipo_producto: v.tipo_producto
         };
 
         await model.updateProduct(existing.id, updatedPayload);
@@ -1068,7 +1060,7 @@
     try {
       const data = await model.getMovementHistory(productId);
 
-      const rowsHtml = (data || []).map(m => {
+      const rowsHtml = (data || []).map((m) => {
         let action = "—";
         if (m.tipo === "entrada") action = "Ingreso de stock";
         if (m.tipo === "salida") action = "Salida de stock";
@@ -1189,7 +1181,7 @@
     });
 
     const itemsMenu = el.navLinks.querySelectorAll("a, button");
-    itemsMenu.forEach(item => {
+    itemsMenu.forEach((item) => {
       item.addEventListener("click", () => {
         el.navLinks.classList.remove("active");
       });
@@ -1337,7 +1329,6 @@
 
       const userData = await loadCurrentUser(uid);
       const fallback = typeof model.bootstrapAuth === "function" ? await model.bootstrapAuth() : null;
-
       const mergedUser = userData || fallback || null;
 
       if (!mergedUser) {

@@ -61,8 +61,23 @@
 
   function parseDate(value) {
     if (!value) return null;
-    if (typeof value === "string" || typeof value === "number") return new Date(value);
-    if (value && typeof value === "object" && value.seconds) return new Date(value.seconds * 1000);
+    if (value instanceof Date) return value;
+
+    if (typeof value === "string" || typeof value === "number") {
+      const d = new Date(value);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+
+    if (value && typeof value === "object" && value.seconds) {
+      const d = new Date(value.seconds * 1000);
+      return Number.isNaN(d.getTime()) ? null : d;
+    }
+
+    if (typeof value?.toDate === "function") {
+      const d = value.toDate();
+      return d instanceof Date && !Number.isNaN(d.getTime()) ? d : null;
+    }
+
     return null;
   }
 
@@ -171,29 +186,19 @@
     return state.currentUser;
   }
 
-  function inferType(productId, preparedMap, insumoMap) {
-    if (preparedMap?.has(String(productId))) return "trago_preparado";
-    if (insumoMap?.has(String(productId))) return "insumo";
-    return "botella";
-  }
-
   function normalizeId(row, table = "") {
     if (!row) return null;
 
     const tableName = String(table || "").toLowerCase();
-    const singular = tableName.endsWith("s")
-      ? tableName.slice(0, -1)
-      : tableName;
+    const singular = tableName.endsWith("s") ? tableName.slice(0, -1) : tableName;
 
     const candidates = [
       row.id,
-
-      // personalizados
       row.recetas_id,
       row.receta_detalle_id,
       row.productos_preparados_id,
       row.productos_insumo_id,
-
+      row.productos_id,
       row.producto_id,
       row.receta_id,
       row.usuario_id,
@@ -202,20 +207,21 @@
       row.sucursal_id,
       row.empresa_id,
       row.cliente_vip_id,
-
-      // automáticos
       row[`${tableName}_id`],
       row[`${singular}_id`]
     ];
 
     const found = candidates.find(
-      (v) =>
-        v !== undefined &&
-        v !== null &&
-        String(v).trim() !== ""
+      (v) => v !== undefined && v !== null && String(v).trim() !== ""
     );
 
     return found ?? null;
+  }
+
+  function inferType(productId, preparedMap, insumoMap) {
+    if (preparedMap?.has(String(productId))) return "trago_preparado";
+    if (insumoMap?.has(String(productId))) return "insumo";
+    return "botella";
   }
 
   async function fetchTableRows(table, select = "*") {
@@ -238,25 +244,40 @@
     }
   }
 
-  async function fetchManyByIds(table, ids, select = "*") {
+  async function fetchManyByIds(table, ids, select = "*", idField = "id") {
+    const supabase = getSupabase();
     const unique = [...new Set((ids || []).filter(Boolean).map(String))];
     if (!unique.length) return {};
 
-    const rows = await fetchTableRows(table, select);
-    if (!rows.length) return {};
+    try {
+      const { data, error } = await supabase
+        .from(table)
+        .select(select)
+        .in(idField, unique);
 
-    return Object.fromEntries(
-      rows
-        .map(row => [String(normalizeId(row, table) || ""), row])
-        .filter(([id]) => id && unique.includes(id))
-    );
+      if (error) {
+        logError(`fetchManyByIds(${table})`, error, { ids: unique, idField });
+        return {};
+      }
+
+      return Object.fromEntries(
+        (data || []).map((row) => [
+          String(row.id ?? row[idField] ?? normalizeId(row, table) ?? ""),
+          row
+        ]).filter(([id]) => id)
+      );
+    } catch (err) {
+      logError(`fetchManyByIds(${table})(catch)`, err, { ids: unique, idField });
+      return {};
+    }
   }
 
   function normalizeProduct(row, stockMap = new Map(), preparedMap = new Map(), insumoMap = new Map(), recipeMap = new Map()) {
     const id = normalizeId(row, "productos");
 
     return {
-      id,
+      id: String(id || ""),
+      producto_id: String(id || ""),
       nombre: String(getValue(row, ["nombre", "name", "producto", "descripcion"], "Sin nombre")),
       tipo_producto: inferType(id, preparedMap, insumoMap),
       receta_id: recipeMap.get(String(id)) || null,
@@ -279,6 +300,8 @@
       descuento: Number(getValue(row, ["descuento"], 0)) || 0,
       impuesto: Number(getValue(row, ["impuesto"], 0)) || 0,
       total: Number(getValue(row, ["total"], 0)) || 0,
+      costo_estandar_total: Number(getValue(row, ["costo_estandar_total"], 0)) || 0,
+      costo_real_total: Number(getValue(row, ["costo_real_total"], 0)) || 0,
       metodo_pago: getValue(row, ["metodo_pago"], "efectivo"),
       estado: getValue(row, ["estado"], "finalizada"),
       observacion: getValue(row, ["observacion"], null),
@@ -287,25 +310,35 @@
       cliente_vip_id: getValue(row, ["cliente_vip_id"], null),
       evento_id: getValue(row, ["evento_id"], null),
       created_at: getValue(row, ["created_at"], null),
+      kind: getValue(row, ["kind"], null),
+      nombre_reserva: getValue(row, ["nombre_reserva"], null),
+      usuario_reserva_nombre: getValue(row, ["usuario_reserva_nombre"], null),
+      usuario_nombre: getValue(row, ["usuario_nombre"], null),
       venta_detalle: Array.isArray(row?.venta_detalle) ? row.venta_detalle : []
     };
   }
 
   function saleDetailText(venta) {
     const detalles = Array.isArray(venta?.venta_detalle) ? venta.venta_detalle : [];
-    if (!detalles.length) return "-";
 
-    return detalles
-      .map((d) => {
-        const nombreProducto =
-          d.productos?.nombre ||
-          d.productos?.name ||
-          d.producto_nombre ||
-          d.nombre ||
-          "Producto";
-        return `${nombreProducto} x${Number(d.cantidad || 0)}`;
-      })
-      .join(", ");
+    const baseText = detalles.length
+      ? detalles
+          .map((d) => {
+            const nombreProducto =
+              d.productos?.nombre ||
+              d.producto_nombre ||
+              d.nombre ||
+              "Producto";
+            return `${nombreProducto} x${Number(d.cantidad || 0)}`;
+          })
+          .join(", ")
+      : "-";
+
+    if (venta?.observacion && String(venta.observacion).trim()) {
+      return `${venta.observacion} | ${baseText}`;
+    }
+
+    return baseText;
   }
 
   async function getSessionUid() {
@@ -344,10 +377,68 @@
   }
 
   async function fetchUserFromDBById(uid) {
+    const supabase = getSupabase();
+
     try {
-      const rows = await fetchTableRows("v_usuarios", "*");
-      const user = rows.find(r => String(normalizeId(r, "usuarios") || "") === String(uid));
-      return user || null;
+      const { data, error } = await supabase
+        .from("v_usuarios")
+        .select("id,nombre,email,telefono,direccion,role,sucursal_id,empresa_id,created_at")
+        .eq("id", uid)
+        .maybeSingle();
+
+      if (!error && data) {
+        return {
+          id: data.id,
+          nombre: data.nombre || "Usuario",
+          email: data.email || null,
+          telefono: data.telefono || null,
+          direccion: data.direccion || null,
+          role: String(data.role || "empleado").toLowerCase(),
+          sucursal_id: data.sucursal_id || null,
+          empresa_id: data.empresa_id || null,
+          created_at: data.created_at || null
+        };
+      }
+
+      const { data: rawUser, error: rawError } = await supabase
+        .from("usuarios")
+        .select("id:usuarios_id,role,sucursal_id,contacto_id,created_at,updated_at")
+        .eq("usuarios_id", uid)
+        .maybeSingle();
+
+      if (rawError || !rawUser) return null;
+
+      let contacto = null;
+      if (rawUser.contacto_id) {
+        const { data: c } = await supabase
+          .from("contactos")
+          .select("id:contactos_id,nombre,telefono,email,direccion")
+          .eq("contactos_id", rawUser.contacto_id)
+          .maybeSingle();
+        contacto = c || null;
+      }
+
+      let sucursal = null;
+      if (rawUser.sucursal_id) {
+        const { data: s } = await supabase
+          .from("sucursales")
+          .select("id:sucursales_id,nombre,codigo,empresa_id")
+          .eq("sucursales_id", rawUser.sucursal_id)
+          .maybeSingle();
+        sucursal = s || null;
+      }
+
+      return {
+        id: uid,
+        nombre: contacto?.nombre || "Usuario",
+        email: contacto?.email || null,
+        telefono: contacto?.telefono || null,
+        direccion: contacto?.direccion || null,
+        role: String(rawUser.role || "empleado").toLowerCase(),
+        sucursal_id: rawUser.sucursal_id || null,
+        empresa_id: sucursal?.empresa_id || null,
+        created_at: rawUser.created_at || null
+      };
     } catch (e) {
       console.error("fetchUserFromDBById:", e);
       return null;
@@ -391,26 +482,28 @@
         });
       }
 
-      const { data: authData } = await supabase.auth.getUser();
-      const authUser = authData?.user || null;
+      if (supabase?.auth?.getUser) {
+        const { data: authData } = await supabase.auth.getUser();
+        const authUser = authData?.user || null;
 
-      if (authUser) {
-        return setCurrentUser({
-          id: authUser.id,
-          nombre:
-            authUser.user_metadata?.nombre ||
-            authUser.app_metadata?.nombre ||
-            authUser.email ||
-            "Usuario",
-          role: String(
-            authUser.app_metadata?.role ||
-            authUser.user_metadata?.role ||
-            "empleado"
-          ).toLowerCase(),
-          empresa_id: authUser.app_metadata?.empresa_id || authUser.user_metadata?.empresa_id || null,
-          sucursal_id: authUser.app_metadata?.sucursal_id || authUser.user_metadata?.sucursal_id || null,
-          email: authUser.email || null
-        });
+        if (authUser) {
+          return setCurrentUser({
+            id: authUser.id,
+            nombre:
+              authUser.user_metadata?.nombre ||
+              authUser.app_metadata?.nombre ||
+              authUser.email ||
+              "Usuario",
+            role: String(
+              authUser.app_metadata?.role ||
+              authUser.user_metadata?.role ||
+              "empleado"
+            ).toLowerCase(),
+            empresa_id: authUser.app_metadata?.empresa_id || authUser.user_metadata?.empresa_id || null,
+            sucursal_id: authUser.app_metadata?.sucursal_id || authUser.user_metadata?.sucursal_id || null,
+            email: authUser.email || null
+          });
+        }
       }
 
       return null;
@@ -426,18 +519,18 @@
     const insumoMap = new Map();
     const recipeMap = new Map();
 
-    if (!unique.length) {
-      return { preparedMap, insumoMap, recipeMap };
-    }
+    if (!unique.length) return { preparedMap, insumoMap, recipeMap };
 
     try {
-      const preparedRows = await fetchTableRows("productos_preparados", "*");
-      const insumoRows = await fetchTableRows("productos_insumo", "*");
+      const [preparedRows, insumoRows] = await Promise.all([
+        fetchTableRows("productos_preparados", "productos_preparados_id,receta_id"),
+        fetchTableRows("productos_insumo", "productos_insumo_id,unidad_medida")
+      ]);
 
       (preparedRows || []).forEach((r) => {
         const rid = String(normalizeId(r, "productos_preparados") || "");
         if (!rid || !unique.includes(rid)) return;
-        preparedMap.set(rid, rid);
+        preparedMap.set(rid, true);
         if (r.receta_id) recipeMap.set(rid, r.receta_id);
       });
 
@@ -459,7 +552,7 @@
     try {
       const { data, error } = await supabase
         .from("movimientos_stock_base")
-        .select("*");
+        .select("producto_id,tipo,cantidad");
 
       if (error) {
         console.warn("loadStockMap error:", error);
@@ -496,17 +589,17 @@
 
     try {
       const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (authError) {
-        logError("getCurrentUserProfile(auth.getUser)", authError, { userId });
-      }
+      if (authError) logError("getCurrentUserProfile(auth.getUser)", authError, { userId });
+
       const authUser = authData?.user || null;
 
-      const users = await fetchTableRows("usuarios", "*");
-      const user = users.find(r => String(normalizeId(r, "usuarios") || "") === String(userId)) || null;
+      const { data: userData, error: userError } = await supabase
+        .from("usuarios")
+        .select("id:usuarios_id,contacto_id,role,sucursal_id,created_at,updated_at")
+        .eq("usuarios_id", userId)
+        .maybeSingle();
 
-      if (!user) {
-        console.warn("[DashboardModel] Usuario no encontrado en tabla usuarios", { userId });
-
+      if (userError || !userData) {
         return {
           id: authUser?.id || userId,
           nombre:
@@ -532,29 +625,25 @@
       }
 
       const [contactsMap, sucursalesMap] = await Promise.all([
-        fetchManyByIds(
-          "contactos",
-          user.contacto_id ? [user.contacto_id] : [],
-          "*"
-        ),
-        fetchManyByIds(
-          "sucursales",
-          user.sucursal_id ? [user.sucursal_id] : [],
-          "*"
-        )
+        fetchManyByIds("contactos", userData.contacto_id ? [userData.contacto_id] : [], "*", "contactos_id"),
+        fetchManyByIds("sucursales", userData.sucursal_id ? [userData.sucursal_id] : [], "*", "sucursales_id")
       ]);
 
-      const contacto = user.contacto_id ? contactsMap[user.contacto_id] : null;
-      const sucursal = user.sucursal_id ? sucursalesMap[user.sucursal_id] : null;
+      const contacto = userData.contacto_id ? contactsMap[userData.contacto_id] : null;
+      const sucursal = userData.sucursal_id ? sucursalesMap[userData.sucursal_id] : null;
 
       let empresa = null;
       if (sucursal?.empresa_id) {
-        const empresas = await fetchTableRows("empresa", "*");
-        empresa = empresas.find(e => String(normalizeId(e, "empresa") || "") === String(sucursal.empresa_id)) || null;
+        const { data: empresaData } = await supabase
+          .from("empresa")
+          .select("empresa_id,nombre")
+          .eq("empresa_id", sucursal.empresa_id)
+          .maybeSingle();
+        empresa = empresaData || null;
       }
 
       return {
-        id: normalizeId(user, "usuarios"),
+        id: normalizeId(userData, "usuarios"),
         nombre:
           contacto?.nombre ||
           authUser?.user_metadata?.nombre ||
@@ -566,12 +655,12 @@
         identificacion: contacto?.identificacion || null,
         direccion: contacto?.direccion || null,
         role: String(
-          user.role ||
+          userData.role ||
           authUser?.app_metadata?.role ||
           authUser?.user_metadata?.role ||
           "empleado"
         ).toLowerCase(),
-        sucursal_id: user.sucursal_id || null,
+        sucursal_id: userData.sucursal_id || null,
         sucursal_nombre: sucursal?.nombre || null,
         empresa_id: sucursal?.empresa_id || authUser?.app_metadata?.empresa_id || authUser?.user_metadata?.empresa_id || null,
         empresa_nombre: empresa?.nombre || authUser?.app_metadata?.empresa_nombre || authUser?.user_metadata?.empresa_nombre || null,
@@ -596,96 +685,116 @@
     }
   }
 
-  async function getProducts() {
+  async function loadSales({ limit = 50 } = {}) {
+    const supabase = getSupabase();
+
     try {
-      const [productsRows, stockMap] = await Promise.all([
-        fetchTableRows("productos", "*"),
-        loadStockMap()
+      const [ventasRes, detallesRes, productosRes, usersRes] = await Promise.all([
+        supabase
+          .from("ventas")
+          .select("id:ventas_id,usuario_id,subtotal,descuento,impuesto,total,metodo_pago,estado,observacion,created_at,cliente_vip_id,evento_id")
+          .eq("estado", "finalizada")
+          .order("created_at", { ascending: false })
+          .limit(limit),
+
+        supabase
+          .from("venta_detalle")
+          .select("venta_id,producto_id,cantidad,precio_unitario,total_linea,costo_unitario,created_at,receta_id")
+          .order("created_at", { ascending: false }),
+
+        supabase
+          .from("productos")
+          .select("id:productos_id,nombre,costo_promedio,precio,activo"),
+
+        supabase
+          .from("v_usuarios")
+          .select("id,nombre,email")
       ]);
 
-      const productIds = productsRows.map(p => normalizeId(p, "productos")).filter(Boolean);
-      const { preparedMap, insumoMap, recipeMap } = await loadProductRelations(productIds);
+      const ventas = ventasRes.error ? [] : (ventasRes.data || []);
+      const detalles = detallesRes.error ? [] : (detallesRes.data || []);
+      const productos = productosRes.error ? [] : (productosRes.data || []);
+      const users = usersRes.error ? [] : (usersRes.data || []);
 
-      return (productsRows || []).map(product =>
-        normalizeProduct(product, stockMap, preparedMap, insumoMap, recipeMap)
+      const productMap = Object.fromEntries(
+        (productos || [])
+          .map((p) => [String(normalizeId(p, "productos") || ""), p])
+          .filter(([id]) => id)
       );
-    } catch (err) {
-      logError("getProducts(catch)", err);
-      return [];
-    }
-  }
 
-  async function getVipClients() {
-    try {
-      const clients = await fetchTableRows("clientes_vip", "*");
-      const contactIds = (clients || []).map(c => c.contacto_id).filter(Boolean);
-      const contactsMap = await fetchManyByIds("contactos", contactIds, "*");
+      const userMap = Object.fromEntries(
+        (users || [])
+          .map((u) => [String(normalizeId(u, "usuarios") || ""), u])
+          .filter(([id]) => id)
+      );
 
-      return (clients || []).map(client => {
-        const contact = client.contacto_id ? contactsMap[client.contacto_id] : null;
-
-        return {
-          ...client,
-          nombre: contact?.nombre || "Sin nombre",
-          telefono: contact?.telefono || null,
-          email: contact?.email || null,
-          identificacion: contact?.identificacion || null,
-          direccion: contact?.direccion || null
-        };
+      const detailsBySale = {};
+      (detalles || []).forEach((d) => {
+        const ventaId = String(d.venta_id || "");
+        if (!ventaId) return;
+        if (!detailsBySale[ventaId]) detailsBySale[ventaId] = [];
+        detailsBySale[ventaId].push({
+          ...d,
+          productos: productMap[String(d.producto_id || "")] || null
+        });
       });
+
+      const result = (ventas || [])
+        .map((v) => {
+          const ventaId = String(normalizeId(v, "ventas") || "");
+          const ventaDetalles = detailsBySale[ventaId] || [];
+
+          const costoRealTotal = ventaDetalles.reduce((sum, d) => {
+            const qty = Number(d.cantidad || 0) || 0;
+            const unit = Number(d.costo_unitario || d.productos?.costo_promedio || 0) || 0;
+            return sum + (qty * unit);
+          }, 0);
+
+          const costoEstandarTotal = ventaDetalles.reduce((sum, d) => {
+            const qty = Number(d.cantidad || 0) || 0;
+            const unit = Number(d.productos?.costo_promedio || d.costo_unitario || 0) || 0;
+            return sum + (qty * unit);
+          }, 0);
+
+          return normalizeVenta({
+            ...v,
+            usuario_nombre: userMap[String(v.usuario_id || "")]?.nombre || null,
+            costo_real_total: costoRealTotal,
+            costo_estandar_total: costoEstandarTotal,
+            venta_detalle: ventaDetalles
+          });
+        })
+        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+        .slice(0, limit);
+
+      return result;
     } catch (err) {
-      logError("getVipClients(catch)", err);
+      logError("loadSales(catch)", err);
       return [];
     }
-  }
-
-  async function decorateSales(rows) {
-    const userIds = [...new Set((rows || []).map(r => r.usuario_id).filter(Boolean))];
-    const clientIds = [...new Set((rows || []).map(r => r.cliente_vip_id).filter(Boolean))];
-
-    const [usersMap, clientsMap] = await Promise.all([
-      fetchManyByIds("v_usuarios", userIds, "*"),
-      fetchManyByIds("clientes_vip", clientIds, "*")
-    ]);
-
-    const clientContactIds = Object.values(clientsMap).map(c => c.contacto_id).filter(Boolean);
-    const clientContactsMap = await fetchManyByIds("contactos", clientContactIds, "*");
-
-    return (rows || []).map(row => {
-      const user = usersMap[row.usuario_id] || null;
-      const client = clientsMap[row.cliente_vip_id] || null;
-      const clientContact = client?.contacto_id ? clientContactsMap[client.contacto_id] : null;
-
-      return {
-        ...row,
-        usuario_nombre: user?.nombre || null,
-        usuario_email: user?.email || null,
-        empresa_id: user?.empresa_id || null,
-        sucursal_id: user?.sucursal_id || null,
-        cliente_nombre: clientContact?.nombre || null,
-        cliente_email: clientContact?.email || null,
-        cliente_telefono: clientContact?.telefono || null,
-        cliente_identificacion: clientContact?.identificacion || null
-      };
-    });
   }
 
   async function getSalesBetween(startDate, endDate) {
+    const supabase = getSupabase();
+
     try {
-      const rows = await fetchTableRows("ventas", "*");
+      let query = supabase
+        .from("ventas")
+        .select("id:ventas_id,usuario_id,subtotal,descuento,impuesto,total,metodo_pago,estado,observacion,created_at,cliente_vip_id,evento_id")
+        .eq("estado", "finalizada")
+        .order("created_at", { ascending: false });
 
-      const filtered = (rows || [])
-        .filter((row) => String(row.estado || "").toLowerCase() === "finalizada")
-        .filter((row) => {
-          const created = row.created_at ? new Date(row.created_at) : null;
-          if (!created || Number.isNaN(created.getTime())) return false;
-          if (startDate && created < new Date(startDate)) return false;
-          if (endDate && created >= new Date(endDate)) return false;
-          return true;
-        })
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      if (startDate) query = query.gte("created_at", toIso(startDate));
+      if (endDate) query = query.lt("created_at", toIso(endDate));
 
-      return await decorateSales(filtered);
+      const { data, error } = await query;
+
+      if (error) {
+        logError("getSalesBetween(ventas)", error, { startDate, endDate });
+        return [];
+      }
+
+      return (data || []).map(normalizeVenta);
     } catch (err) {
       logError("getSalesBetween(catch)", err, { startDate, endDate });
       return [];
@@ -705,12 +814,22 @@
   }
 
   async function getTopSeller() {
+    const supabase = getSupabase();
+
     try {
-      const data = await fetchTableRows("ventas", "*");
+      const { data, error } = await supabase
+        .from("ventas")
+        .select("id:ventas_id,usuario_id,subtotal,descuento,impuesto,total,created_at,estado")
+        .eq("estado", "finalizada");
+
+      if (error) {
+        logError("getTopSeller(ventas)", error);
+        return null;
+      }
 
       const grouped = new Map();
 
-      (data || []).forEach(row => {
+      (data || []).forEach((row) => {
         if (!row.usuario_id) return;
 
         const current = grouped.get(row.usuario_id) || {
@@ -779,7 +898,7 @@
 
     try {
       const rows = await fetchTableRows(viewName, "*");
-      return rows.find(r => String(r[fieldName] || "") === key) || null;
+      return rows.find((r) => String(r[fieldName] || "") === key) || null;
     } catch (err) {
       logError(`getPeriodReport(${viewName})(catch)`, err, { fieldName, key });
       return null;
@@ -809,12 +928,12 @@
       const boxesMap = {};
       let totalBoxes = 0;
 
-      (sales || []).forEach(sale => {
+      (sales || []).forEach((sale) => {
         const saleDate = parseDate(sale.created_at);
         if (!saleDate) return;
         if (saleDate < monthStart || saleDate >= nextMonthStart) return;
 
-        (sale.venta_detalle || []).forEach(row => {
+        (sale.venta_detalle || []).forEach((row) => {
           const productId = row.producto_id;
           const qty = toNumber(row.cantidad);
 
@@ -833,12 +952,15 @@
     }
   }
 
-
   async function getProductById(productId) {
     try {
-      const rows = await fetchTableRows("productos", "*");
-      const data = rows.find(r => String(normalizeId(r, "productos") || "") === String(productId)) || null;
-      if (!data) return null;
+      const { data, error } = await supabase
+        .from("productos")
+        .select("id:productos_id,nombre,precio,costo_promedio,activo,sucursal_id,created_at,updated_at")
+        .eq("productos_id", productId)
+        .maybeSingle();
+
+      if (error || !data) return null;
 
       const stockMap = await loadStockMap();
       const { preparedMap, insumoMap, recipeMap } = await loadProductRelations([productId]);
@@ -850,150 +972,282 @@
     }
   }
 
-  async function loadSales({ limit = 50 } = {}) {
+  async function getProducts() {
+    return loadProducts();
+  }
+
+  async function loadProducts() {
     try {
-      const [ventasRows, detallesRows, productosRows] = await Promise.all([
-        fetchTableRows("ventas", "*"),
-        fetchTableRows("venta_detalle", "*"),
-        fetchTableRows("productos", "*")
+      const [productsRows, sales, stockMap] = await Promise.all([
+        fetchTableRows("productos", "id:productos_id,sucursal_id,nombre,precio,costo_promedio,activo,created_at,updated_at"),
+        loadSales({ limit: 50 }),
+        loadStockMap()
       ]);
 
-      const productMap = Object.fromEntries(
-        productosRows
-          .map(p => [String(normalizeId(p, "productos") || ""), p])
-          .filter(([id]) => id)
+      const productIds = (productsRows || []).map((p) => normalizeId(p, "productos")).filter(Boolean);
+      const { preparedMap, insumoMap, recipeMap } = await loadProductRelations(productIds);
+
+      const products = (productsRows || []).map((product) =>
+        normalizeProduct(product, stockMap, preparedMap, insumoMap, recipeMap)
       );
 
-      const detallesByVenta = {};
-      (detallesRows || []).forEach((d) => {
-        const ventaId = String(d.venta_id || "");
-        if (!ventaId) return;
-        if (!detallesByVenta[ventaId]) detallesByVenta[ventaId] = [];
-        detallesByVenta[ventaId].push({
-          ...d,
-          productos: productMap[String(d.producto_id || "")] || null
-        });
+      const forecastMap = {};
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth();
+      const firstDay = new Date(year, month, 1);
+      const daysElapsed = Math.max(1, Math.ceil((now - firstDay) / 86400000) + 1);
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+      for (const sale of sales || []) {
+        const saleDate = parseDate(sale.created_at);
+        if (!saleDate) continue;
+        if (saleDate.getFullYear() !== year || saleDate.getMonth() !== month) continue;
+
+        const details = Array.isArray(sale.venta_detalle) ? sale.venta_detalle : [];
+        for (const d of details) {
+          const productId = d.producto_id || d.productos?.id || null;
+          if (!productId) continue;
+
+          const qty = Number(d.cantidad || 0) || 0;
+          if (!forecastMap[productId]) {
+            forecastMap[productId] = {
+              soldThisMonth: 0,
+              avgDaily: 0,
+              projectedNextMonth: 0,
+              suggested: 0
+            };
+          }
+
+          forecastMap[productId].soldThisMonth += qty;
+        }
+      }
+
+      for (const product of products) {
+        const soldThisMonth = Number(forecastMap[product.id]?.soldThisMonth || 0);
+        const avgDaily = soldThisMonth / daysElapsed;
+        const projectedNextMonth = avgDaily * daysInMonth;
+
+        forecastMap[product.id] = {
+          soldThisMonth,
+          avgDaily,
+          projectedNextMonth,
+          suggested: Math.max(0, Math.ceil(projectedNextMonth - Number(product.stock || 0)))
+        };
+      }
+
+      state.productsCache = {};
+      products.forEach((p) => {
+        state.productsCache[p.id] = p;
       });
 
-      const filtered = (ventasRows || [])
-        .filter((v) => String(v.estado || "").toLowerCase() === "finalizada")
-        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-        .slice(0, limit)
-        .map((v) => normalizeVenta({
-          ...v,
-          venta_detalle: detallesByVenta[String(normalizeId(v, "ventas") || "")] || []
-        }));
-
-      return filtered;
-    } catch (err) {
-      logError("loadSales(catch)", err);
-      return [];
+      return { products, forecastMap };
+    } catch (e) {
+      console.error("loadProducts error:", e);
+      return { products: [], forecastMap: {} };
     }
   }
 
-  async function createProduct(payload) {
-    const supabase = getSupabase();
+  async function getSuggestionForProduct(productId, stock, forecastMap = {}) {
+    const forecast = forecastMap?.[productId] || {
+      soldThisMonth: 0,
+      avgDaily: 0,
+      projectedNextMonth: 0,
+      suggested: 0
+    };
+
+    const suggested = Math.max(0, Math.ceil(Number(forecast.projectedNextMonth || 0) - Number(stock || 0)));
+
+    return {
+      soldThisMonth: Number(forecast.soldThisMonth || 0),
+      avgDaily: Number(forecast.avgDaily || 0),
+      projectedNextMonth: Number(forecast.projectedNextMonth || 0),
+      suggested
+    };
+  }
+
+  async function fetchUserName(userId) {
+    if (!userId) return "-";
+
+    if (state.usersCache[userId]) {
+      return state.usersCache[userId];
+    }
 
     try {
-      const insertPayload = {
-        sucursal_id: payload.sucursal_id ?? state.context?.sucursalId ?? global.adminSucursal ?? null,
-        nombre: payload.nombre,
-        precio: Number(payload.precio || 0) || 0,
-        costo_promedio: Number(payload.costo_promedio || 0) || 0,
-        activo: payload.activo !== false
-      };
-
       const { data, error } = await supabase
-        .from("productos")
-        .insert(insertPayload)
-        .select("*")
+        .from("v_usuarios")
+        .select("id,nombre,email")
+        .eq("id", userId)
         .maybeSingle();
 
-      if (error) throw error;
-
-      const product = data || insertPayload;
-      if (payload.tipo_producto === "insumo") {
-        await upsertInsumoProduct(normalizeId(product, "productos"), payload.unidad_medida || "unidad");
+      if (!error && data?.nombre) {
+        state.usersCache[userId] = data.nombre || "Desconocido";
+        return state.usersCache[userId];
       }
 
-      const stock = Number(payload.stock || 0) || 0;
-      if (stock > 0) {
-        await registerStockMovement({
-          producto_id: normalizeId(product, "productos"),
-          tipo: "entrada",
-          cantidad: stock,
-          costo: Number(payload.costo_promedio || 0) || 0,
-          observacion: "Stock inicial"
-        });
-      }
-
-      state.productsCache[normalizeId(product, "productos")] = product;
-      return await getProductById(normalizeId(product, "productos"));
+      state.usersCache[userId] = "Desconocido";
+      return state.usersCache[userId];
     } catch (e) {
-      console.error("createProduct error:", e);
-      throw e;
+      console.error("Error obteniendo usuario:", e);
+      state.usersCache[userId] = "Error";
+      return state.usersCache[userId];
     }
   }
 
-  async function updateProduct(productId, payload) {
-    const supabase = getSupabase();
-
-    try {
-      const updatePayload = {};
-
-      if (payload.nombre !== undefined) updatePayload.nombre = payload.nombre;
-      if (payload.precio !== undefined) updatePayload.precio = Number(payload.precio || 0) || 0;
-      if (payload.costo_promedio !== undefined) updatePayload.costo_promedio = Number(payload.costo_promedio || 0) || 0;
-      if (payload.activo !== undefined) updatePayload.activo = Boolean(payload.activo);
-      if (payload.sucursal_id !== undefined) updatePayload.sucursal_id = payload.sucursal_id;
-
-      const { data, error } = await supabase
-        .from("productos")
-        .update(updatePayload)
-        .eq("id", productId)
-        .select("*")
-        .maybeSingle();
-
-      if (error) throw error;
-
-      if (payload.tipo_producto === "insumo" && payload.unidad_medida) {
-        await upsertInsumoProduct(productId, payload.unidad_medida);
-      } else if (payload.tipo_producto === "trago_preparado") {
-        // Vínculo se maneja al guardar la receta.
-      } else if (payload.tipo_producto === "botella" || payload.tipo_producto === "servicio") {
-        await removeInsumoProduct(productId).catch(() => { });
-      }
-
-      const product = data || { id: productId, ...updatePayload };
-      state.productsCache[productId] = product;
-      return await getProductById(productId);
-    } catch (e) {
-      console.error("updateProduct error:", e);
-      throw e;
-    }
+  function getCart() {
+    return state.cart.slice();
   }
 
-  async function deleteProduct(productId) {
-    const supabase = getSupabase();
+  function getSubtotal() {
+    return state.cart.reduce((sum, item) => sum + Number(item.total || 0), 0);
+  }
 
-    try {
-      const { error } = await supabase
-        .from("productos")
-        .update({ activo: false })
-        .eq("id", productId);
+  function clearCart() {
+    state.cart = [];
+  }
 
-      if (error) throw error;
+  function removeCartItem(index) {
+    if (index < 0 || index >= state.cart.length) return false;
+    state.cart.splice(index, 1);
+    return true;
+  }
 
-      state.productsCache[productId] = {
-        ...(state.productsCache[productId] || {}),
-        activo: false
-      };
-
-      return true;
-    } catch (e) {
-      console.error("deleteProduct(error lógico) error:", e);
-      throw e;
+  function updateCartQuantity(index, qty) {
+    const item = state.cart[index];
+    if (!item) {
+      return { ok: false, message: "Ítem no encontrado" };
     }
+
+    const value = Math.max(1, Number(qty || 1));
+    const product = state.productsCache[item.productId];
+    const stock = Number(product?.stock || 0);
+
+    const alreadyOther = state.cart
+      .filter((_, i) => i !== index && String(state.cart[i].productId) === String(item.productId))
+      .reduce((sum, i) => sum + Number(i.cantidad || 0), 0);
+
+    if ((value + alreadyOther) > stock) {
+      return { ok: false, message: `Stock disponible: ${stock}` };
+    }
+
+    item.cantidad = value;
+    item.total = item.cantidad * item.precio_unitario;
+    return { ok: true };
+  }
+
+  function addToCart(productId, qty = 1) {
+    const key = String(productId || "");
+    const prod = state.productsCache[key];
+
+    if (!key) {
+      return { ok: false, message: "Selecciona un producto" };
+    }
+
+    if (!prod) {
+      return { ok: false, message: "Producto no encontrado" };
+    }
+
+    if (String(prod.tipo_producto || "").toLowerCase() === "servicio") {
+      return { ok: false, message: "Los servicios no se venden desde este módulo." };
+    }
+
+    const cantidad = Math.max(1, Number(qty || 1));
+    const currentInCart = state.cart.find((i) => i.kind === "product" && String(i.productId) === key);
+    const already = currentInCart ? Number(currentInCart.cantidad || 0) : 0;
+
+    if ((already + cantidad) > Number(prod.stock || 0)) {
+      return { ok: false, message: `Stock disponible: ${prod.stock}` };
+    }
+
+    if (currentInCart) {
+      currentInCart.cantidad += cantidad;
+      currentInCart.total = Number(currentInCart.cantidad) * Number(currentInCart.precio_unitario);
+    } else {
+      state.cart.push({
+        kind: "product",
+        productId: key,
+        saleProductId: String(prod.producto_id || prod.id),
+        nombre: prod.nombre,
+        precio_unitario: Number(prod.precio || 0),
+        cantidad,
+        total: Number(cantidad) * Number(prod.precio || 0)
+      });
+    }
+
+    return { ok: true, message: "Producto añadido" };
+  }
+
+  async function finalizeSale(options = {}) {
+    const {
+      metodoPago = "efectivo",
+      descuento = 0,
+      impuesto = 0,
+      observacion = null
+    } = options;
+
+    if (!state.cart.length) {
+      return { ok: false, message: "Carrito vacío" };
+    }
+
+    if (!state.currentUser) {
+      state.currentUser = await bootstrapAuth();
+    }
+
+    const currentUser = state.currentUser;
+    const empresaId = String(currentUser?.empresa_id || state.context?.empresaId || global.adminEmpresa || "").trim();
+    const sucursalId = String(currentUser?.sucursal_id || state.context?.sucursalId || global.adminSucursal || "").trim();
+    const usuarioId = String(currentUser?.id || state.context?.userId || "").trim();
+
+    if (!currentUser || !usuarioId || !empresaId || !sucursalId) {
+      return { ok: false, message: "No se pudo detectar la sesión, empresa o sucursal del usuario." };
+    }
+
+    const payload = {
+      p_empresa_id: empresaId,
+      p_sucursal_id: sucursalId,
+      p_usuario_id: usuarioId,
+      p_metodo_pago: String(metodoPago || "efectivo"),
+      p_descuento: Number(descuento || 0),
+      p_impuesto: Number(impuesto || 0),
+      p_observacion: observacion,
+      p_items: state.cart.map((i) => ({
+        saleProductId: i.saleProductId || i.productId,
+        producto_id: i.productId,
+        product_id: i.productId,
+        cantidad: Number(i.cantidad || 0),
+        precio_unitario: Number(i.precio_unitario || 0)
+      }))
+    };
+
+    const { data, error } = await supabase.rpc("registrar_venta_app", payload);
+
+    if (error) {
+      throw error;
+    }
+
+    if (!data) {
+      throw new Error("No se pudo registrar la venta.");
+    }
+
+    state.cart = [];
+    return { ok: true, data };
+  }
+
+  function saveDraft() {
+    if (!state.cart.length) {
+      return { ok: false, message: "Carrito vacío" };
+    }
+
+    const draft = {
+      created_at: new Date().toISOString(),
+      user_id: state.currentUser?.id || state.context?.userId || null,
+      empresa_id: state.currentUser?.empresa_id || state.context?.empresaId || global.adminEmpresa || null,
+      sucursal_id: state.currentUser?.sucursal_id || state.context?.sucursalId || global.adminSucursal || null,
+      items: state.cart
+    };
+
+    localStorage.setItem("sales_draft_v1", JSON.stringify(draft));
+    return { ok: true, draft };
   }
 
   async function registerStockMovement(payload) {
@@ -1040,10 +1294,10 @@
       if (error) throw error;
 
       const rows = data || [];
-      const userIds = [...new Set(rows.map(r => r.usuario_id).filter(Boolean))];
-      const usersMap = await fetchManyByIds("v_usuarios", userIds, "*");
+      const userIds = [...new Set(rows.map((r) => r.usuario_id).filter(Boolean))];
+      const usersMap = await fetchManyByIds("v_usuarios", userIds, "id,nombre,email", "id");
 
-      return rows.map(row => ({
+      return rows.map((row) => ({
         ...row,
         usuarios: {
           nombre: usersMap[row.usuario_id]?.nombre || "Sistema"
@@ -1059,13 +1313,13 @@
     try {
       const [recipes, preparedRows, productsRows] = await Promise.all([
         fetchTableRows("recetas", RECIPE_SELECT),
-        fetchTableRows("productos_preparados", "*"),
-        fetchTableRows("productos", "*")
+        fetchTableRows("productos_preparados", "productos_preparados_id,receta_id"),
+        fetchTableRows("productos", "id:productos_id,nombre")
       ]);
 
       const productMap = Object.fromEntries(
         (productsRows || [])
-          .map(p => [String(normalizeId(p, "productos") || ""), p])
+          .map((p) => [String(normalizeId(p, "productos") || ""), p])
           .filter(([id]) => id)
       );
 
@@ -1098,7 +1352,7 @@
     try {
       const rows = await fetchTableRows("receta_detalle", "*");
       return (rows || [])
-        .filter(r => String(r.receta_id || "") === String(recipeId))
+        .filter((r) => String(r.receta_id || "") === String(recipeId))
         .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
     } catch (e) {
       console.error("getRecipeDetails error:", e);
@@ -1106,45 +1360,36 @@
     }
   }
 
-  async function subscribeRealtime(onProductsChange, onSalesChange) {
-    if (typeof supabase.channel !== "function") return null;
-
+  async function getRecipeByProductId(productId) {
     try {
-      cleanupRealtime();
+      const [links, recipes] = await Promise.all([
+        fetchTableRows("productos_preparados", "productos_preparados_id,receta_id"),
+        fetchTableRows("recetas", RECIPE_SELECT)
+      ]);
 
-      state.productsChannel = supabase
-        .channel("inventory-products-channel")
-        .on("postgres_changes", { event: "*", schema: "public", table: "productos" }, async () => {
-          if (typeof onProductsChange === "function") await onProductsChange();
-        })
-        .subscribe();
+      const link = (links || []).find(
+        (l) => String(normalizeId(l, "productos_preparados") || "") === String(productId)
+      );
 
-      state.salesChannel = supabase
-        .channel("inventory-sales-channel")
-        .on("postgres_changes", { event: "*", schema: "public", table: "ventas" }, async () => {
-          if (typeof onSalesChange === "function") await onSalesChange();
-        })
-        .subscribe();
+      if (!link?.receta_id) return null;
 
-      return true;
+      const recipe = (recipes || []).find(
+        (r) => String(normalizeId(r, "recetas") || "") === String(link.receta_id)
+      );
+
+      if (!recipe) return null;
+
+      const recipeId = normalizeId(recipe, "recetas");
+
+      return {
+        ...recipe,
+        id: recipeId,
+        recetas_id: recipeId,
+        producto_id: productId
+      };
     } catch (e) {
-      console.warn("Realtime no disponible:", e);
-      return false;
-    }
-  }
-
-  function cleanupRealtime() {
-    try {
-      if (state.productsChannel && typeof supabase.removeChannel === "function") {
-        supabase.removeChannel(state.productsChannel);
-        state.productsChannel = null;
-      }
-      if (state.salesChannel && typeof supabase.removeChannel === "function") {
-        supabase.removeChannel(state.salesChannel);
-        state.salesChannel = null;
-      }
-    } catch (e) {
-      console.warn("cleanupRealtime:", e);
+      console.error("getRecipeByProductId error:", e);
+      return null;
     }
   }
 
@@ -1152,10 +1397,6 @@
     const supabase = getSupabase();
     const payload = { ...row };
     const hasId = payload[idField] !== undefined && payload[idField] !== null && String(payload[idField]).trim() !== "";
-
-    if (!hasId) {
-      delete payload[idField];
-    }
 
     if (hasId) {
       const { data: updatedData, error: updateError } = await supabase
@@ -1165,14 +1406,11 @@
         .select("*")
         .maybeSingle();
 
-      if (updateError) {
-        logError(`saveRowById.update(${table})`, updateError, { payload });
-      }
-
-      if (updatedData) {
-        return updatedData;
-      }
+      if (!updateError && updatedData) return updatedData;
+      if (updateError) logError(`saveRowById.update(${table})`, updateError, { payload });
     }
+
+    delete payload[idField];
 
     const { data: insertedData, error: insertError } = await supabase
       .from(table)
@@ -1227,9 +1465,7 @@
 
   async function upsertInsumoProduct(productId, unidadMedida = "unidad") {
     try {
-      if (!productId) {
-        throw new Error("productId es obligatorio.");
-      }
+      if (!productId) throw new Error("productId es obligatorio.");
 
       return await saveRowById("productos_insumo", {
         productos_insumo_id: productId,
@@ -1262,51 +1498,13 @@
     }
   }
 
-  async function getRecipeByProductId(productId) {
-    try {
-      const [links, recipes] = await Promise.all([
-        fetchTableRows("productos_preparados", "*"),
-        fetchTableRows("recetas", RECIPE_SELECT)
-      ]);
-
-      const link = (links || []).find(
-        l => String(normalizeId(l, "productos_preparados") || "") === String(productId)
-      );
-
-      if (!link?.receta_id) return null;
-
-      const recipe = (recipes || []).find(
-        r => String(normalizeId(r, "recetas") || "") === String(link.receta_id)
-      );
-
-      if (!recipe) return null;
-
-      const recipeId = normalizeId(recipe, "recetas");
-
-      return {
-        ...recipe,
-        id: recipeId,
-        recetas_id: recipeId,
-        producto_id: productId
-      };
-    } catch (e) {
-      console.error("getRecipeByProductId error:", e);
-      return null;
-    }
-  }
-
   async function upsertRecipe(recipe) {
     const supabase = getSupabase();
 
     try {
       const existingRecipeId = recipe.recetas_id || recipe.id || null;
       const payload = {
-        sucursal_id:
-          recipe.sucursal_id ??
-          state.context?.sucursalId ??
-          global.adminSucursal ??
-          null,
-
+        sucursal_id: recipe.sucursal_id ?? state.context?.sucursalId ?? global.adminSucursal ?? null,
         nombre: recipe.nombre,
         descripcion: recipe.descripcion || null,
         rendimiento: Number(recipe.rendimiento || 1) || 1,
@@ -1315,16 +1513,12 @@
 
       let query;
 
-      // UPDATE
       if (existingRecipeId) {
         query = supabase
           .from("recetas")
           .update(payload)
           .eq("recetas_id", existingRecipeId);
-      }
-
-      // INSERT
-      else {
+      } else {
         query = supabase
           .from("recetas")
           .insert(payload);
@@ -1339,15 +1533,10 @@
         throw error;
       }
 
-      const recipeId =
-        normalizeId(data, "recetas") ||
-        existingRecipeId;
+      const recipeId = normalizeId(data, "recetas") || existingRecipeId;
 
       if (recipe.producto_id && recipeId) {
-        await linkPreparedProduct(
-          recipe.producto_id,
-          recipeId
-        );
+        await linkPreparedProduct(recipe.producto_id, recipeId);
       }
 
       return {
@@ -1355,7 +1544,6 @@
         id: recipeId,
         recetas_id: recipeId
       };
-
     } catch (e) {
       console.error("upsertRecipe error:", e);
       throw e;
@@ -1367,11 +1555,7 @@
 
     try {
       const recipeId = recipe.recetas_id || recipe.id || null;
-      const sucursalId =
-        recipe.sucursal_id ??
-        state.context?.sucursalId ??
-        global.adminSucursal ??
-        null;
+      const sucursalId = recipe.sucursal_id ?? state.context?.sucursalId ?? global.adminSucursal ?? null;
 
       const payload = {
         p_receta_id: recipeId,
@@ -1463,286 +1647,195 @@
     }
   }
 
+  async function createProduct(payload) {
+    const supabase = getSupabase();
+
+    try {
+      const insertPayload = {
+        sucursal_id: payload.sucursal_id ?? state.context?.sucursalId ?? global.adminSucursal ?? null,
+        nombre: payload.nombre,
+        precio: Number(payload.precio || 0) || 0,
+        costo_promedio: Number(payload.costo_promedio || 0) || 0,
+        activo: payload.activo !== false
+      };
+
+      const { data, error } = await supabase
+        .from("productos")
+        .insert(insertPayload)
+        .select("*")
+        .maybeSingle();
+
+      if (error) throw error;
+
+      const product = data || insertPayload;
+      const productId = normalizeId(product, "productos");
+
+      if (payload.tipo_producto === "insumo") {
+        await upsertInsumoProduct(productId, payload.unidad_medida || "unidad");
+      }
+
+      const stock = Number(payload.stock || 0) || 0;
+      if (stock > 0) {
+        await registerStockMovement({
+          producto_id: productId,
+          tipo: "entrada",
+          cantidad: stock,
+          costo: Number(payload.costo_promedio || 0) || 0,
+          observacion: "Stock inicial"
+        });
+      }
+
+      state.productsCache[productId] = product;
+      return await getProductById(productId);
+    } catch (e) {
+      console.error("createProduct error:", e);
+      throw e;
+    }
+  }
+
+  async function updateProduct(productId, payload) {
+    const supabase = getSupabase();
+
+    try {
+      const updatePayload = {};
+
+      if (payload.nombre !== undefined) updatePayload.nombre = payload.nombre;
+      if (payload.precio !== undefined) updatePayload.precio = Number(payload.precio || 0) || 0;
+      if (payload.costo_promedio !== undefined) updatePayload.costo_promedio = Number(payload.costo_promedio || 0) || 0;
+      if (payload.activo !== undefined) updatePayload.activo = Boolean(payload.activo);
+      if (payload.sucursal_id !== undefined) updatePayload.sucursal_id = payload.sucursal_id;
+
+      const { data, error } = await supabase
+        .from("productos")
+        .update(updatePayload)
+        .eq("productos_id", productId)
+        .select("*")
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (payload.tipo_producto === "insumo" && payload.unidad_medida) {
+        await upsertInsumoProduct(productId, payload.unidad_medida);
+      } else if (payload.tipo_producto === "trago_preparado") {
+        // El vínculo se maneja al guardar la receta.
+      } else if (payload.tipo_producto === "botella" || payload.tipo_producto === "servicio") {
+        await removeInsumoProduct(productId).catch(() => {});
+      }
+
+      const product = data || { productos_id: productId, ...updatePayload };
+      state.productsCache[productId] = product;
+      return await getProductById(productId);
+    } catch (e) {
+      console.error("updateProduct error:", e);
+      throw e;
+    }
+  }
+
+  async function deleteProduct(productId) {
+    const supabase = getSupabase();
+
+    try {
+      const { error } = await supabase
+        .from("productos")
+        .update({ activo: false })
+        .eq("productos_id", productId);
+
+      if (error) throw error;
+
+      state.productsCache[productId] = {
+        ...(state.productsCache[productId] || {}),
+        activo: false
+      };
+
+      return true;
+    } catch (e) {
+      console.error("deleteProduct(error lógico) error:", e);
+      throw e;
+    }
+  }
+
+  async function subscribeRealtime(onProductsChange, onSalesChange) {
+    if (typeof supabase.channel !== "function") return null;
+
+    try {
+      cleanupRealtime();
+
+      state.productsChannel = supabase
+        .channel("inventory-products-channel")
+        .on("postgres_changes", { event: "*", schema: "public", table: "productos" }, async () => {
+          if (typeof onProductsChange === "function") await onProductsChange();
+        })
+        .subscribe();
+
+      state.salesChannel = supabase
+        .channel("inventory-sales-channel")
+        .on("postgres_changes", { event: "*", schema: "public", table: "ventas" }, async () => {
+          if (typeof onSalesChange === "function") await onSalesChange();
+        })
+        .subscribe();
+
+      return true;
+    } catch (e) {
+      console.warn("Realtime no disponible:", e);
+      return false;
+    }
+  }
+
+  function cleanupRealtime() {
+    try {
+      if (state.productsChannel && typeof supabase.removeChannel === "function") {
+        supabase.removeChannel(state.productsChannel);
+        state.productsChannel = null;
+      }
+      if (state.salesChannel && typeof supabase.removeChannel === "function") {
+        supabase.removeChannel(state.salesChannel);
+        state.salesChannel = null;
+      }
+    } catch (e) {
+      console.warn("cleanupRealtime:", e);
+    }
+  }
+
   global.inventoryModel = {
     LOW_STOCK_THRESHOLD,
     state,
     currency,
     getValue,
     parseDate,
+    toNumber,
     setContext,
     getContext,
     setCurrentUser,
     getCurrentUser,
+    normalizeId,
     normalizeProduct,
     normalizeVenta,
     saleDetailText,
     bootstrapAuth,
-    loadProducts: async function () {
-      try {
-        const [productsRows, sales, stockMap] = await Promise.all([
-          fetchTableRows("productos", "*"),
-          loadSales({ limit: 50 }),
-          loadStockMap()
-        ]);
-
-        const productIds = (productsRows || []).map(p => normalizeId(p, "productos")).filter(Boolean);
-        const { preparedMap, insumoMap, recipeMap } = await loadProductRelations(productIds);
-
-        const products = (productsRows || []).map(product =>
-          normalizeProduct(product, stockMap, preparedMap, insumoMap, recipeMap)
-        );
-
-        const forecastMap = {};
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = now.getMonth();
-        const firstDay = new Date(year, month, 1);
-        const today = new Date();
-        const daysElapsed = Math.max(1, Math.ceil((today - firstDay) / 86400000) + 1);
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-        for (const sale of sales || []) {
-          const saleDate = parseDate(sale.created_at);
-          if (!saleDate) continue;
-          if (saleDate.getFullYear() !== year || saleDate.getMonth() !== month) continue;
-
-          const details = Array.isArray(sale.venta_detalle) ? sale.venta_detalle : [];
-          for (const d of details) {
-            const productId = d.producto_id || d.productos?.id || null;
-            if (!productId) continue;
-
-            const qty = Number(d.cantidad || 0) || 0;
-            if (!forecastMap[productId]) {
-              forecastMap[productId] = {
-                soldThisMonth: 0,
-                avgDaily: 0,
-                projectedNextMonth: 0,
-                suggested: 0
-              };
-            }
-
-            forecastMap[productId].soldThisMonth += qty;
-          }
-        }
-
-        for (const product of products) {
-          const soldThisMonth = Number(forecastMap[product.id]?.soldThisMonth || 0);
-          const avgDaily = soldThisMonth / daysElapsed;
-          const projectedNextMonth = avgDaily * daysInMonth;
-
-          forecastMap[product.id] = {
-            soldThisMonth,
-            avgDaily,
-            projectedNextMonth,
-            suggested: Math.max(0, Math.ceil(projectedNextMonth - Number(product.stock || 0)))
-          };
-        }
-
-        state.productsCache = {};
-        products.forEach((p) => {
-          state.productsCache[p.id] = p;
-        });
-
-        return { products, forecastMap };
-      } catch (e) {
-        console.error("loadProducts error:", e);
-        return { products: [], forecastMap: {} };
-      }
-    },
+    loadProducts,
+    getProducts,
     loadSales,
-    fetchProductsRows: async function () {
-      try {
-        const rows = await fetchTableRows("productos", "*");
-        return rows || [];
-      } catch (e) {
-        console.error("fetchProductsRows error:", e);
-        return [];
-      }
-    },
-    getSuggestionForProduct: function (productId, stock, forecastMap = {}) {
-      const forecast = forecastMap?.[productId] || {
-        soldThisMonth: 0,
-        avgDaily: 0,
-        projectedNextMonth: 0,
-        suggested: 0
-      };
-
-      const suggested = Math.max(0, Math.ceil(Number(forecast.projectedNextMonth || 0) - Number(stock || 0)));
-
-      return {
-        soldThisMonth: Number(forecast.soldThisMonth || 0),
-        avgDaily: Number(forecast.avgDaily || 0),
-        projectedNextMonth: Number(forecast.projectedNextMonth || 0),
-        suggested
-      };
-    },
-    fetchUserName: async function (userId) {
-      if (!userId) return "-";
-
-      if (state.usersCache[userId]) {
-        return state.usersCache[userId];
-      }
-
-      try {
-        const rows = await fetchTableRows("v_usuarios", "*");
-        const user = rows.find(r => String(normalizeId(r, "usuarios") || "") === String(userId));
-
-        if (!user) {
-          state.usersCache[userId] = "Desconocido";
-        } else {
-          state.usersCache[userId] = user.nombre || "Desconocido";
-        }
-
-        return state.usersCache[userId];
-      } catch (e) {
-        console.error("Error obteniendo usuario:", e);
-        state.usersCache[userId] = "Error";
-        return state.usersCache[userId];
-      }
-    },
-    getCart: function () {
-      return state.cart.slice();
-    },
-    getSubtotal: function () {
-      return state.cart.reduce((sum, item) => sum + Number(item.total || 0), 0);
-    },
-    clearCart: function () {
-      state.cart = [];
-    },
-    removeCartItem: function (index) {
-      if (index < 0 || index >= state.cart.length) return false;
-      state.cart.splice(index, 1);
-      return true;
-    },
-    updateCartQuantity: function (index, qty) {
-      const item = state.cart[index];
-      if (!item) {
-        return { ok: false, message: "Ítem no encontrado" };
-      }
-
-      const value = Math.max(1, Number(qty || 1));
-      const product = state.productsCache[item.productId];
-      const stock = Number(product?.stock || 0);
-
-      const alreadyOther = state.cart
-        .filter((_, i) => i !== index && state.cart[i].productId === item.productId)
-        .reduce((sum, i) => sum + Number(i.cantidad || 0), 0);
-
-      if ((value + alreadyOther) > stock) {
-        return { ok: false, message: `Stock disponible: ${stock}` };
-      }
-
-      item.cantidad = value;
-      item.total = item.cantidad * item.precio_unitario;
-      return { ok: true };
-    },
-    addToCart: function (productId, qty = 1) {
-      const prod = state.productsCache[productId];
-
-      if (!productId) {
-        return { ok: false, message: "Selecciona un producto" };
-      }
-
-      if (!prod) {
-        return { ok: false, message: "Producto no encontrado" };
-      }
-
-      const cantidad = Math.max(1, Number(qty || 1));
-      const currentInCart = state.cart.find((i) => i.productId === productId);
-      const already = currentInCart ? currentInCart.cantidad : 0;
-
-      if ((already + cantidad) > Number(prod.stock || 0)) {
-        return { ok: false, message: `Stock disponible: ${prod.stock}` };
-      }
-
-      if (currentInCart) {
-        currentInCart.cantidad += cantidad;
-        currentInCart.total = Number(currentInCart.cantidad) * Number(currentInCart.precio_unitario);
-      } else {
-        state.cart.push({
-          productId,
-          nombre: prod.nombre,
-          precio_unitario: Number(prod.precio || 0),
-          cantidad,
-          total: Number(cantidad) * Number(prod.precio || 0)
-        });
-      }
-
-      return { ok: true, message: "Producto añadido" };
-    },
-    finalizeSale: async function (options = {}) {
-      const {
-        metodoPago = "efectivo",
-        descuento = 0,
-        impuesto = 0,
-        observacion = null
-      } = options;
-
-      if (!state.cart.length) {
-        return { ok: false, message: "Carrito vacío" };
-      }
-
-      if (!state.currentUser) {
-        state.currentUser = await bootstrapAuth();
-      }
-
-      const currentUser = state.currentUser;
-
-      const empresaId = String(currentUser?.empresa_id || state.context?.empresaId || global.adminEmpresa || "").trim();
-      const sucursalId = String(currentUser?.sucursal_id || state.context?.sucursalId || global.adminSucursal || "").trim();
-      const usuarioId = String(currentUser?.id || state.context?.userId || "").trim();
-
-      if (!currentUser || !usuarioId || !empresaId || !sucursalId) {
-        return { ok: false, message: "No se pudo detectar la sesión, empresa o sucursal del usuario." };
-      }
-
-      const payload = {
-        p_empresa_id: empresaId,
-        p_sucursal_id: sucursalId,
-        p_usuario_id: usuarioId,
-        p_metodo_pago: String(metodoPago || "efectivo"),
-        p_descuento: Number(descuento || 0),
-        p_impuesto: Number(impuesto || 0),
-        p_observacion: observacion,
-        p_items: state.cart.map((i) => ({
-          producto_id: i.productId,
-          cantidad: Number(i.cantidad || 0),
-          precio_unitario: Number(i.precio_unitario || 0)
-        }))
-      };
-
-      const { data, error } = await supabase.rpc("registrar_venta_app", payload);
-
-      if (error) {
-        throw error;
-      }
-
-      if (!data) {
-        throw new Error("No se pudo registrar la venta.");
-      }
-
-      state.cart = [];
-      return { ok: true, data };
-    },
-    saveDraft: function () {
-      if (!state.cart.length) {
-        return { ok: false, message: "Carrito vacío" };
-      }
-
-      const draft = {
-        created_at: new Date().toISOString(),
-        user_id: state.currentUser?.id || state.context?.userId || null,
-        empresa_id: state.currentUser?.empresa_id || state.context?.empresaId || global.adminEmpresa || null,
-        sucursal_id: state.currentUser?.sucursal_id || state.context?.sucursalId || global.adminSucursal || null,
-        items: state.cart
-      };
-
-      localStorage.setItem("sales_draft_v1", JSON.stringify(draft));
-      return { ok: true, draft };
-    },
-    createProduct,
-    updateProduct,
-    deleteProduct,
+    getSalesBetween,
+    getSalesForToday,
+    getSalesForWeek,
+    getSalesForMonth,
+    getTopSeller,
+    getDailyReport,
+    getWeeklyReport,
+    getMonthlyReport,
+    getMonthlyProductSalesMap,
+    getSuggestionForProduct,
+    fetchUserName,
+    fetchTableRows,
+    fetchManyByIds,
+    getCart,
+    getSubtotal,
+    clearCart,
+    removeCartItem,
+    updateCartQuantity,
+    addToCart,
+    finalizeSale,
+    saveDraft,
     registerStockMovement,
     getMovementHistory,
     getRecipes,
@@ -1756,6 +1849,9 @@
     unlinkPreparedProduct,
     upsertInsumoProduct,
     removeInsumoProduct,
+    createProduct,
+    updateProduct,
+    deleteProduct,
     getProductById,
     subscribeRealtime,
     cleanupRealtime

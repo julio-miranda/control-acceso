@@ -15,6 +15,11 @@
     });
   }
 
+  const PLANILLA_AJUSTES_KEY = "planilla_ajustes_v1";
+  const HORAS_EXTRA_FACTOR = 2;
+  const RENTA_THRESHOLD = 550;
+  const RENTA_RATE = 0.10;
+
   function parseTimeString(timeStr) {
     if (!timeStr) return null;
     timeStr = String(timeStr).trim();
@@ -110,6 +115,88 @@
   function toNumber(value) {
     const n = Number(value);
     return Number.isFinite(n) ? n : 0;
+  }
+
+  function roundMoney(value) {
+    return Number(toNumber(value).toFixed(2));
+  }
+
+  function getPayrollPeriodKey(fechaInicio, fechaFin) {
+    return `${fechaInicio || ""}__${fechaFin || ""}`;
+  }
+
+  function readPayrollAdjustments() {
+    try {
+      if (!global.localStorage) return {};
+      return JSON.parse(global.localStorage.getItem(PLANILLA_AJUSTES_KEY) || "{}") || {};
+    } catch (e) {
+      console.warn("readPayrollAdjustments:", e);
+      return {};
+    }
+  }
+
+  function writePayrollAdjustments(data) {
+    try {
+      if (!global.localStorage) return false;
+      global.localStorage.setItem(PLANILLA_AJUSTES_KEY, JSON.stringify(data || {}));
+      return true;
+    } catch (e) {
+      console.warn("writePayrollAdjustments:", e);
+      return false;
+    }
+  }
+
+  function getPayrollAdjustment(fechaInicio, fechaFin, uid) {
+    const all = readPayrollAdjustments();
+    const period = getPayrollPeriodKey(fechaInicio, fechaFin);
+    const row = all?.[period]?.[uid] || {};
+
+    return {
+      bonificacion: roundMoney(row.bonificacion || 0),
+      ayudaEconomica: roundMoney(row.ayudaEconomica || 0),
+      nota: String(row.nota || "")
+    };
+  }
+
+  function setPayrollAdjustment(fechaInicio, fechaFin, uid, adjustment = {}) {
+    if (!uid) return false;
+
+    const all = readPayrollAdjustments();
+    const period = getPayrollPeriodKey(fechaInicio, fechaFin);
+
+    if (!all[period]) all[period] = {};
+    all[period][uid] = {
+      bonificacion: roundMoney(adjustment.bonificacion || 0),
+      ayudaEconomica: roundMoney(adjustment.ayudaEconomica || 0),
+      nota: String(adjustment.nota || "").trim()
+    };
+
+    return writePayrollAdjustments(all);
+  }
+
+  function createPayrollGroup() {
+    return {
+      horasNorm: 0,
+      horasExt: 0,
+      salarioBase: 0,
+      pagoHorasExtras: 0,
+      recargoNocturno: 0,
+      bruto: 0
+    };
+  }
+
+  function addPayrollAmounts(group, norm, ext, salH, aplicarNocturno, jornada) {
+    const nocturnoFactor = aplicarNocturno && esJornadaNocturna(jornada) ? 0.5 : 0;
+    const baseNormal = norm * salH;
+    const baseExtra = ext * salH * HORAS_EXTRA_FACTOR;
+    const recargoNocturno = (baseNormal + baseExtra) * nocturnoFactor;
+
+    group.horasNorm += norm;
+    group.horasExt += ext;
+    group.salarioBase += baseNormal;
+    group.pagoHorasExtras += baseExtra;
+    group.recargoNocturno += recargoNocturno;
+    group.bruto += baseNormal + baseExtra + recargoNocturno;
   }
 
   function toDate(value) {
@@ -917,7 +1004,7 @@
         if (!entrada_time_norm && !esEntradaConsentida) return;
 
         if (!grupos[uid]) {
-          grupos[uid] = { horasNorm: 0, horasExt: 0, bruto: 0 };
+          grupos[uid] = createPayrollGroup();
           fechasAtendidas[uid] = new Set();
         }
 
@@ -965,11 +1052,7 @@
         ext = Math.round(ext * 100) / 100;
 
         const salH = Number(empleado.salario_h || 0) || 0;
-        const factor = aplicarNocturno && esJornadaNocturna(jm) ? 1.5 : 1.0;
-
-        grupos[uid].horasNorm += norm;
-        grupos[uid].horasExt += ext;
-        grupos[uid].bruto += (norm + ext) * salH * factor;
+        addPayrollAmounts(grupos[uid], norm, ext, salH, aplicarNocturno, jm);
       });
 
       const start = new Date(fechaInicio);
@@ -988,14 +1071,11 @@
             const jm = jmId ? jornadasMap[jmId] : null;
 
             if (jm) {
-              if (!grupos[uid]) grupos[uid] = { horasNorm: 0, horasExt: 0, bruto: 0 };
+              if (!grupos[uid]) grupos[uid] = createPayrollGroup();
 
               const dur = (crearFechaCompleta(fechaInicio, jm.end) - crearFechaCompleta(fechaInicio, jm.start)) / 3600000;
               const salH = Number(empleado.salario_h || 0) || 0;
-              const factor = aplicarNocturno && esJornadaNocturna(jm) ? 1.5 : 1.0;
-
-              grupos[uid].horasNorm += falt * dur;
-              grupos[uid].bruto += falt * dur * salH * factor;
+              addPayrollAmounts(grupos[uid], falt * dur, 0, salH, aplicarNocturno, jm);
             }
           }
         }
@@ -1005,20 +1085,39 @@
         .map((uid) => {
           const e = empleados[uid] || { nombre: "Desconocido" };
           const g = grupos[uid];
-          const isss = e.isss ? g.bruto * 0.03 : 0;
-          const afp = e.afp ? g.bruto * 0.075 : 0;
-          const neto = g.bruto - isss - afp;
+          const adjustment = getPayrollAdjustment(fechaInicio, fechaFin, uid);
+          const bonificacion = roundMoney(adjustment.bonificacion);
+          const ayudaEconomica = roundMoney(adjustment.ayudaEconomica);
+          const ingresoGravado = roundMoney(g.bruto + bonificacion);
+          const isss = e.isss ? ingresoGravado * 0.03 : 0;
+          const afp = e.afp ? ingresoGravado * 0.075 : 0;
+          const rentaBase = Math.max(0, ingresoGravado - isss - afp);
+          const renta = rentaBase > RENTA_THRESHOLD
+            ? (rentaBase - RENTA_THRESHOLD) * RENTA_RATE
+            : 0;
+          const deducciones = isss + afp + renta;
+          const neto = ingresoGravado + ayudaEconomica - deducciones;
 
           return {
             uid,
             nombre: e.nombre || "Desconocido",
+            salarioHora: roundMoney(e.salario_h || 0),
             horasNormales: Number((g.horasNorm || 0).toFixed(2)),
             horasExtras: Number((g.horasExt || 0).toFixed(2)),
             totalHoras: Number(((g.horasNorm || 0) + (g.horasExt || 0)).toFixed(2)),
-            totalBruto: Number((g.bruto || 0).toFixed(2)),
-            isss: Number(isss.toFixed(2)),
-            afp: Number(afp.toFixed(2)),
-            totalNeto: Number(neto.toFixed(2))
+            salarioBase: roundMoney(g.salarioBase || 0),
+            pagoHorasExtras: roundMoney(g.pagoHorasExtras || 0),
+            recargoNocturno: roundMoney(g.recargoNocturno || 0),
+            bonificacion,
+            ayudaEconomica,
+            ingresoGravado,
+            totalBruto: roundMoney(g.bruto + bonificacion + ayudaEconomica),
+            isss: roundMoney(isss),
+            afp: roundMoney(afp),
+            renta: roundMoney(renta),
+            deducciones: roundMoney(deducciones),
+            totalNeto: roundMoney(neto),
+            ajusteNota: adjustment.nota
           };
         })
         .sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), "es", { sensitivity: "base" }));
@@ -1044,6 +1143,8 @@
     cargarJornadasMap,
     hayNocturnasEnPeriodo,
     fetchUsuarioJornadasPara,
+    getPayrollAdjustment,
+    setPayrollAdjustment,
     calcularPlanillaSemanalData,
     getCurrentUserProfile,
     getProducts,
@@ -1064,7 +1165,10 @@
     getMonthStart,
     getNextMonthStart,
     getWeekStart,
-    getNextWeekStart
+    getNextWeekStart,
+    HORAS_EXTRA_FACTOR,
+    RENTA_THRESHOLD,
+    RENTA_RATE
   };
 
   global.parseTimeString = global.parseTimeString || parseTimeString;

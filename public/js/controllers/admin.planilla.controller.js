@@ -31,6 +31,66 @@
     return !!getEl("aplicar-nocturno")?.checked;
   }
 
+  function formatMoney(value) {
+    return `$${Number(value || 0).toFixed(2)}`;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function parseMoneyInput(value) {
+    const n = Number(String(value || "0").replace(",", "."));
+    return Number.isFinite(n) ? Math.max(0, n) : 0;
+  }
+
+  async function editarAjustesPlanilla(uid, nombre) {
+    const model = getModel();
+    if (!model || !uid) return;
+
+    const inicio = getFechaInicio();
+    const fin = getFechaFin();
+    const current = model.getPayrollAdjustment
+      ? model.getPayrollAdjustment(inicio, fin, uid)
+      : { bonificacion: 0, ayudaEconomica: 0, nota: "" };
+
+    const bonificacion = prompt(
+      `Bonificación gravada para ${nombre}`,
+      Number(current.bonificacion || 0).toFixed(2)
+    );
+    if (bonificacion === null) return;
+
+    const ayudaEconomica = prompt(
+      `Ayuda económica no gravada para ${nombre}`,
+      Number(current.ayudaEconomica || 0).toFixed(2)
+    );
+    if (ayudaEconomica === null) return;
+
+    const nota = prompt(
+      `Nota de ajuste para ${nombre}`,
+      current.nota || ""
+    );
+    if (nota === null) return;
+
+    model.setPayrollAdjustment(inicio, fin, uid, {
+      bonificacion: parseMoneyInput(bonificacion),
+      ayudaEconomica: parseMoneyInput(ayudaEconomica),
+      nota
+    });
+
+    await calcularPlanillaSemanal(
+      inicio,
+      fin,
+      getAplicarNocturno(),
+      global.__planillaCache?.jornadasMap || null
+    );
+  }
+
   function ocultarSecciones() {
     const ids = [
       "perfil-container",
@@ -52,7 +112,7 @@
     if (cont) cont.style.display = "block";
   }
 
-  function renderPlanilla(rows = []) {
+  function renderPlanillaLegacy(rows = []) {
     const tbody = document.querySelector("#planillaTable tbody");
     if (!tbody) return;
 
@@ -60,7 +120,7 @@
 
     if (!rows.length) {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td colspan="8" style="text-align:center;">No hay datos para mostrar</td>`;
+      tr.innerHTML = `<td colspan="16" style="text-align:center;">No hay datos para mostrar</td>`;
       tbody.appendChild(tr);
       return;
     }
@@ -77,6 +137,51 @@
         <td>$${Number(r.afp || 0).toFixed(2)}</td>
         <td>$${Number(r.totalNeto || 0).toFixed(2)}</td>
       `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderPlanilla(rows = []) {
+    const tbody = document.querySelector("#planillaTable tbody");
+    if (!tbody) return;
+
+    tbody.innerHTML = "";
+
+    if (!rows.length) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td colspan="16" style="text-align:center;">No hay datos para mostrar</td>`;
+      tbody.appendChild(tr);
+      return;
+    }
+
+    rows.forEach((r) => {
+      const tr = document.createElement("tr");
+      const noteTitle = r.ajusteNota ? ` title="${escapeHtml(r.ajusteNota)}"` : "";
+
+      tr.innerHTML = `
+        <td${noteTitle}>${escapeHtml(r.nombre || "-")}</td>
+        <td>${formatMoney(r.salarioHora)}</td>
+        <td>${Number(r.horasNormales || 0).toFixed(2)}</td>
+        <td>${Number(r.horasExtras || 0).toFixed(2)}</td>
+        <td>${Number(r.totalHoras || 0).toFixed(2)}</td>
+        <td>${formatMoney(r.salarioBase)}</td>
+        <td>${formatMoney(r.pagoHorasExtras)}</td>
+        <td>${formatMoney(r.bonificacion)}</td>
+        <td>${formatMoney(r.ayudaEconomica)}</td>
+        <td>${formatMoney(r.totalBruto)}</td>
+        <td>${formatMoney(r.isss)}</td>
+        <td>${formatMoney(r.afp)}</td>
+        <td>${formatMoney(r.renta)}</td>
+        <td>${formatMoney(r.deducciones)}</td>
+        <td>${formatMoney(r.totalNeto)}</td>
+        <td><button type="button" class="btn-outline planilla-ajuste-btn" data-uid="${escapeHtml(r.uid)}">Ajustar</button></td>
+      `;
+
+      const btn = tr.querySelector(".planilla-ajuste-btn");
+      if (btn) {
+        btn.addEventListener("click", () => editarAjustesPlanilla(r.uid, r.nombre || "-"));
+      }
+
       tbody.appendChild(tr);
     });
   }

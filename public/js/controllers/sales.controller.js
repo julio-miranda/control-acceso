@@ -1,4 +1,4 @@
-// js/controllers/sales.controller.js
+// js/controllers/sales.controller.js 
 (function (global) {
   "use strict";
 
@@ -36,6 +36,8 @@
     trago_preparado: "Trago preparado",
     servicio: "Servicio"
   };
+
+  const SALES_TABLE_COLUMNS = 6;
 
   let salesDataTable = null;
   let companyName = "";
@@ -99,10 +101,29 @@
     alert("Error: " + msg);
   }
 
+  function getProductDisplayName(p) {
+    if (!p) return "Producto";
+
+    const baseName = String(p.nombre || "Producto");
+    const recetaName = String(p.receta_nombre || "").trim();
+
+    if (String(p.tipo_producto || "").toLowerCase() === "trago_preparado" && recetaName) {
+      if (recetaName.toLowerCase() !== baseName.toLowerCase()) {
+        return `${baseName} • ${recetaName}`;
+      }
+    }
+
+    return baseName;
+  }
+
   function getSellableProducts() {
     return Object.values(model.state.productsCache || {})
       .filter((p) => Boolean(p.activo) && String(p.tipo_producto || "").toLowerCase() !== "servicio")
-      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es", { sensitivity: "base" }));
+      .sort((a, b) => {
+        const pa = String(a.tipo_producto || "").toLowerCase() === "trago_preparado" ? 0 : 1;
+        const pb = String(b.tipo_producto || "").toLowerCase() === "trago_preparado" ? 0 : 1;
+        return pa - pb || String(a.nombre || "").localeCompare(String(b.nombre || ""), "es", { sensitivity: "base" });
+      });
   }
 
   function initProductSelect2() {
@@ -144,7 +165,16 @@
   function renderProductSelect() {
     if (!productSelect) return;
 
-    const products = getSellableProducts();
+    const products = Object.values(model.state.productsCache || {})
+      .filter((p) => Boolean(p.activo))
+      .sort((a, b) => {
+        const rank = (p) => String(p.tipo_producto || "").toLowerCase() === "trago_preparado" ? 0 : 1;
+        return rank(a) - rank(b) || String(a.nombre || "").localeCompare(String(b.nombre || ""), "es", { sensitivity: "base" });
+      });
+
+    const preparados = products.filter((p) => String(p.tipo_producto || "").toLowerCase() === "trago_preparado");
+    const individuales = products.filter((p) => String(p.tipo_producto || "").toLowerCase() !== "trago_preparado");
+
     productSelect.innerHTML = "";
 
     const blank = document.createElement("option");
@@ -152,18 +182,34 @@
     blank.textContent = "";
     productSelect.appendChild(blank);
 
-    if (!products.length) {
+    const addGroup = (label, items) => {
+      if (!items.length) return;
+
+      const group = document.createElement("optgroup");
+      group.label = label;
+
+      items.forEach((p) => {
+        const opt = document.createElement("option");
+        opt.value = String(p.id);
+
+        const displayName = getProductDisplayName(p);
+        const typeText = getTypeText(p.tipo_producto);
+
+        opt.textContent = `${displayName} | ${typeText} | ${formatMoney(p.precio)} | Stock: ${p.stock}`;
+        group.appendChild(opt);
+      });
+
+      productSelect.appendChild(group);
+    };
+
+    addGroup("Tragos preparados", preparados);
+    addGroup("Productos individuales", individuales);
+
+    if (!preparados.length && !individuales.length) {
       const opt = document.createElement("option");
       opt.value = "";
-      opt.textContent = "No hay productos";
+      opt.textContent = "No hay productos disponibles";
       productSelect.appendChild(opt);
-    } else {
-      products.forEach((p) => {
-        const opt = document.createElement("option");
-        opt.value = p.id;
-        opt.textContent = `${p.nombre} (${getTypeText(p.tipo_producto)}) | ${formatMoney(p.precio)} | Stock: ${p.stock}`;
-        productSelect.appendChild(opt);
-      });
     }
 
     initProductSelect2();
@@ -215,13 +261,24 @@
 
     const preparedRows = await Promise.all(
       (rows || []).map(async (v) => {
-        const userName = v.usuario_id ? await model.fetchUserName(v.usuario_id) : "-";
+        const isReserva = String(v.kind || "").toLowerCase() === "reserva";
+
+        const nombre = isReserva
+          ? (v.nombre_reserva || v.observacion || "Reserva")
+          : (v.usuario_nombre ? model.saleLabel(v) : model.saleDetailText(v));
+
+        const userName = isReserva
+          ? (v.usuario_reserva_nombre || "-")
+          : (v.usuario_nombre || (v.usuario_id ? await model.fetchUserName(v.usuario_id) : "-"));
+
         const d = model.parseDate(v.created_at);
         const dateText = d ? d.toLocaleString() : "-";
 
         return [
-          model.saleDetailText(v),
-          model.currency(v.total),
+          nombre,
+          model.currency(v.total || 0),
+          model.currency(v.costo_estandar_total || 0),
+          model.currency(v.costo_real_total || 0),
           userName || "-",
           dateText
         ];
@@ -241,7 +298,7 @@
     tbody.innerHTML = "";
 
     if (!preparedRows.length) {
-      tbody.innerHTML = "<tr><td colspan='4'>No hay ventas registradas.</td></tr>";
+      tbody.innerHTML = `<tr><td colspan="${SALES_TABLE_COLUMNS}">No hay ventas registradas.</td></tr>`;
       return;
     }
 
@@ -271,7 +328,7 @@
       const { data, error } = await supabase
         .from("empresa")
         .select("nombre")
-        .eq("id", user.empresa_id)
+        .eq("empresa_id", user.empresa_id)
         .maybeSingle();
 
       if (!error && data && data.nombre) {
@@ -296,7 +353,7 @@
     cartTableBody.innerHTML = "";
 
     if (!cart.length) {
-      cartTableBody.innerHTML = "<tr><td colspan='5'>El carrito está vacío.</td></tr>";
+      cartTableBody.innerHTML = `<tr><td colspan="5">El carrito está vacío.</td></tr>`;
       if (cartSubtotalEl) cartSubtotalEl.textContent = model.currency(0);
       if (btnFinalize) btnFinalize.disabled = true;
       return;
@@ -381,56 +438,60 @@
     if (btnFinalize) btnFinalize.disabled = false;
   }
 
-  async function handleAddToCart() {
-    const productId = productSelect ? productSelect.value : "";
-    const qty = Math.max(1, Number(saleQuantityInput ? saleQuantityInput.value || 1 : 1));
-    const result = model.addToCart(productId, qty);
+  function addToCart(productId, qty = 1) {
+    const key = String(productId || "");
+    const prod = model.state.productsCache[key];
 
-    if (!result.ok) {
-      if (Swal) {
-        Swal.fire({
-          toast: true,
-          position: "top-end",
-          icon: "warning",
-          title: result.message || "No se pudo agregar",
-          showConfirmButton: false,
-          timer: 1400
-        });
-      } else {
-        alert(result.message || "No se pudo agregar");
-      }
-      return;
+    if (!key) {
+      return { ok: false, message: "Selecciona un producto" };
     }
 
-    renderCart();
+    if (!prod) {
+      return { ok: false, message: "Producto no encontrado" };
+    }
 
-    if (Swal) {
-      Swal.fire({
-        toast: true,
-        position: "top-end",
-        icon: "success",
-        title: result.message || "Producto añadido",
-        showConfirmButton: false,
-        timer: 1200
+    if (String(prod.tipo_producto || "").toLowerCase() === "servicio") {
+      return { ok: false, message: "Los servicios no se venden desde este módulo." };
+    }
+
+    const cantidad = Math.max(1, Number(qty || 1));
+    const currentInCart = model.state.cart.find((i) => i.kind === "product" && String(i.productId) === key);
+    const already = currentInCart ? Number(currentInCart.cantidad || 0) : 0;
+
+    const check = model.canReserveProductQty
+      ? model.canReserveProductQty(key, already + cantidad, null)
+      : { ok: true };
+
+    if (!check.ok) return check;
+
+    if (currentInCart) {
+      currentInCart.cantidad += cantidad;
+      currentInCart.total = Number(currentInCart.cantidad) * Number(currentInCart.precio_unitario);
+    } else {
+      model.state.cart.push({
+        kind: "product",
+        productId: key,
+        saleProductId: String(prod.producto_id || prod.id),
+        tipo_producto: prod.tipo_producto || "insumo",
+        nombre: prod.nombre,
+        precio_unitario: Number(prod.precio || 0),
+        cantidad,
+        total: Number(cantidad) * Number(prod.precio || 0)
       });
     }
 
-    if (saleQuantityInput) saleQuantityInput.value = 1;
-
-    if (productSelect) {
-      productSelect.value = "";
-      if (global.jQuery && $.fn.select2 && $(productSelect).hasClass("select2-hidden-accessible")) {
-        $(productSelect).val("").trigger("change");
-      }
-    }
+    return { ok: true, message: "Producto añadido" };
   }
 
   function buildComboOptionHtml(selectedValue = "") {
     return getSellableProducts()
       .map((p) => {
         const selected = String(p.id) === String(selectedValue) ? "selected" : "";
-        return `<option value="${escapeHtml(p.id)}" ${selected}>
-          ${escapeHtml(p.nombre)} (${escapeHtml(getTypeText(p.tipo_producto))}) | ${escapeHtml(model.currency(p.precio))}
+        const displayName = getProductDisplayName(p);
+        const recetaExtra = String(p.receta_nombre || "").trim() ? ` • ${p.receta_nombre}` : "";
+
+        return `<option value="${escapeHtml(String(p.id))}" ${selected}>
+          ${escapeHtml(displayName)}${String(p.tipo_producto || "").toLowerCase() === "trago_preparado" ? escapeHtml(recetaExtra) : ""} (${escapeHtml(getTypeText(p.tipo_producto))}) | ${escapeHtml(model.currency(p.precio))}
         </option>`;
       })
       .join("");
@@ -606,6 +667,50 @@
     } catch (e) {
       console.error("Error finalizando venta:", e);
       notifyError(e.message || "No se pudo finalizar la venta.");
+    }
+  }
+
+  function handleAddToCart() {
+    const productId = productSelect ? productSelect.value : "";
+    const qty = Math.max(1, Number(saleQuantityInput ? saleQuantityInput.value || 1 : 1));
+    const result = addToCart(productId, qty);
+
+    if (!result.ok) {
+      if (Swal) {
+        Swal.fire({
+          toast: true,
+          position: "top-end",
+          icon: "warning",
+          title: result.message || "No se pudo agregar",
+          showConfirmButton: false,
+          timer: 1400
+        });
+      } else {
+        alert(result.message || "No se pudo agregar");
+      }
+      return;
+    }
+
+    renderCart();
+
+    if (Swal) {
+      Swal.fire({
+        toast: true,
+        position: "top-end",
+        icon: "success",
+        title: result.message || "Producto añadido",
+        showConfirmButton: false,
+        timer: 1200
+      });
+    }
+
+    if (saleQuantityInput) saleQuantityInput.value = 1;
+
+    if (productSelect) {
+      productSelect.value = "";
+      if (global.jQuery && $.fn.select2 && $(productSelect).hasClass("select2-hidden-accessible")) {
+        $(productSelect).val("").trigger("change");
+      }
     }
   }
 
@@ -818,9 +923,14 @@
 
   document.addEventListener("DOMContentLoaded", boot);
 
+  global.handleAddToCart = handleAddToCart;
+  global.handleFinalize = handleFinalize;
+
   global.salesController = {
     boot,
     renderCart,
-    renderProductSelect
+    renderProductSelect,
+    handleAddToCart,
+    handleFinalize
   };
 })(window);

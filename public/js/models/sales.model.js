@@ -1,4 +1,4 @@
-// js/models/sales.model.js
+// js/controllers/sales.controller.js
 (function (global) {
   "use strict";
 
@@ -13,6 +13,7 @@
 
   const state = {
     productsCache: {},
+    productsByRealId: {},
     cart: [],
     usersCache: {},
     currentUser: null,
@@ -28,6 +29,10 @@
       error,
       ...extra
     });
+  }
+
+  function logInfo(context, data = {}) {
+    console.log(`[SalesModel] ${context}`, data);
   }
 
   function getValue(obj, keys, fallback = "") {
@@ -112,18 +117,32 @@
     return d ? d.toISOString() : null;
   }
 
+  function getProductByKey(productId) {
+    const key = String(productId || "");
+    return state.productsCache[key] || state.productsByRealId[key] || null;
+  }
+
   function normalizeProduct(row, extra = {}) {
+    const id = getValue(row, ["id"], null);
+    const productoIdReal = getValue(row, ["producto_id"], id);
+
     return {
-      id: row.id,
+      id: String(id || ""),
+      producto_id: String(productoIdReal || ""),
       nombre: String(getValue(row, ["nombre", "name", "producto", "descripcion"], "Sin nombre")),
       tipo_producto: String(getValue(extra, ["tipo_producto"], getValue(row, ["tipo_producto"], "insumo"))),
+      categoria_venta: String(getValue(extra, ["categoria_venta"], getValue(row, ["categoria_venta"], "Producto individual"))),
       unidad_medida: String(getValue(extra, ["unidad_medida"], getValue(row, ["unidad_medida"], "unidad"))),
       stock: Number(getValue(extra, ["stock"], getValue(row, ["stock", "cantidad"], 0))) || 0,
       precio: Number(getValue(row, ["precio", "price", "costo"], 0)) || 0,
       costo_promedio: Number(getValue(row, ["costo_promedio"], 0)) || 0,
       activo: Boolean(getValue(row, ["activo"], true)),
       sucursal_id: getValue(row, ["sucursal_id"], null),
-      receta_id: getValue(extra, ["receta_id"], null),
+      receta_id: getValue(extra, ["receta_id"], getValue(row, ["receta_id"], null)),
+      receta_nombre: String(getValue(extra, ["receta_nombre"], getValue(row, ["receta_nombre"], ""))),
+      receta_descripcion: String(getValue(extra, ["receta_descripcion"], getValue(row, ["receta_descripcion"], ""))),
+      receta_rendimiento: Number(getValue(extra, ["receta_rendimiento"], getValue(row, ["receta_rendimiento"], 0))) || 0,
+      receta_activa: Boolean(getValue(extra, ["receta_activa"], getValue(row, ["receta_activa"], true))),
       recipe_details: Array.isArray(extra.recipe_details) ? extra.recipe_details : []
     };
   }
@@ -139,9 +158,20 @@
       estado: getValue(row, ["estado"], "finalizada"),
       observacion: getValue(row, ["observacion"], null),
       usuario_id: getValue(row, ["usuario_id"], null),
+      usuario_nombre: getValue(row, ["usuario_nombre"], null),
       cliente_vip_id: getValue(row, ["cliente_vip_id"], null),
       evento_id: getValue(row, ["evento_id"], null),
       created_at: getValue(row, ["created_at"], null),
+      kind: getValue(row, ["kind"], null),
+      nombre_reserva: getValue(row, ["nombre_reserva"], null),
+      usuario_reserva_nombre: getValue(row, ["usuario_reserva_nombre"], null),
+
+      costo_estandar_total: Number(getValue(row, ["costo_estandar_total"], 0)) || 0,
+      costo_real_total: Number(getValue(row, ["costo_real_total"], 0)) || 0,
+
+      costo_estandar_unitario: Number(getValue(row, ["costo_estandar_unitario"], 0)) || 0,
+      costo_real_unitario: Number(getValue(row, ["costo_real_unitario"], 0)) || 0,
+
       venta_detalle: Array.isArray(row.venta_detalle) ? row.venta_detalle : []
     };
   }
@@ -169,6 +199,13 @@
     return baseText;
   }
 
+  function saleLabel(venta) {
+    if (String(venta?.kind || "").toLowerCase() === "reserva") {
+      return venta.nombre_reserva || venta.observacion || "Reserva";
+    }
+    return saleDetailText(venta);
+  }
+
   function setCurrentUser(user) {
     state.currentUser = user || null;
 
@@ -177,6 +214,13 @@
       global.adminEmpresa = user.empresa_id != null ? String(user.empresa_id) : "";
       global.adminSucursal = user.sucursal_id != null ? String(user.sucursal_id) : "";
     }
+
+    logInfo("setCurrentUser", {
+      userId: user?.id || null,
+      empresaId: user?.empresa_id || null,
+      sucursalId: user?.sucursal_id || null,
+      role: user?.role || null
+    });
 
     return state.currentUser;
   }
@@ -227,7 +271,7 @@
     }
   }
 
-  async function fetchManyByIds(table, ids, select = "*") {
+  async function fetchManyByIds(table, ids, select = "id", idField = "id") {
     const supabase = getSupabase();
     const unique = [...new Set((ids || []).filter(Boolean))];
 
@@ -237,16 +281,19 @@
       const { data, error } = await supabase
         .from(table)
         .select(select)
-        .in("id", unique);
+        .in(idField, unique);
 
       if (error) {
-        logError(`fetchManyByIds(${table})`, error, { ids: unique });
+        logError(`fetchManyByIds(${table})`, error, { ids: unique, idField });
         return {};
       }
 
-      return Object.fromEntries((data || []).map((row) => [row.id, row]));
+      return Object.fromEntries((data || []).map((row) => [
+        row.id ?? row[idField],
+        row
+      ]));
     } catch (err) {
-      logError(`fetchManyByIds(${table})(catch)`, err, { ids: unique });
+      logError(`fetchManyByIds(${table})(catch)`, err, { ids: unique, idField });
       return {};
     }
   }
@@ -261,9 +308,7 @@
         .eq("id", uid)
         .maybeSingle();
 
-      if (error) {
-        console.warn("Error consultando v_usuarios:", error);
-      } else if (data) {
+      if (!error && data) {
         return {
           id: data.id,
           nombre: data.nombre || "Usuario",
@@ -279,23 +324,18 @@
 
       ({ data, error } = await supabase
         .from("usuarios")
-        .select("id,role,sucursal_id,contacto_id,created_at,updated_at")
-        .eq("id", uid)
+        .select("usuarios_id:id,role,sucursal_id,contacto_id,created_at,updated_at")
+        .eq("usuarios_id", uid)
         .maybeSingle());
 
-      if (error) {
-        console.warn("Error consultando usuarios:", error);
-        return null;
-      }
-
-      if (!data) return null;
+      if (error || !data) return null;
 
       let contacto = null;
       if (data.contacto_id) {
         const { data: c } = await supabase
           .from("contactos")
-          .select("id,nombre,telefono,email,direccion")
-          .eq("id", data.contacto_id)
+          .select("contactos_id:id,nombre,telefono,email,direccion")
+          .eq("contactos_id", data.contacto_id)
           .maybeSingle();
         contacto = c || null;
       }
@@ -304,14 +344,14 @@
       if (data.sucursal_id) {
         const { data: s } = await supabase
           .from("sucursales")
-          .select("id,nombre,codigo,empresa_id")
-          .eq("id", data.sucursal_id)
+          .select("sucursales_id:id,nombre,codigo,empresa_id")
+          .eq("sucursales_id", data.sucursal_id)
           .maybeSingle();
         sucursal = s || null;
       }
 
       return {
-        id: data.id,
+        id: uid,
         nombre: contacto?.nombre || "Usuario",
         email: contacto?.email || null,
         telefono: contacto?.telefono || null,
@@ -332,11 +372,12 @@
       if (state.currentUser) return state.currentUser;
 
       const uid = await getSessionUid();
+      logInfo("bootstrapAuth: session lookup", { uid });
 
       if (!uid) {
         const local = JSON.parse(localStorage.getItem("currentUser") || "null");
         if (local) {
-          const fallback = {
+          const user = {
             id: local.uid || local.id || null,
             nombre: local.name || local.nombre || local.email || "Usuario",
             role: local.role || "empleado",
@@ -344,17 +385,21 @@
             sucursal_id: local.sucursal_id || null,
             email: local.email || null
           };
-          return setCurrentUser(fallback);
+          logInfo("bootstrapAuth: localStorage fallback", user);
+          return setCurrentUser(user);
         }
         return null;
       }
 
       const userDB = await fetchUserFromDBById(uid);
-      if (userDB) return setCurrentUser(userDB);
+      if (userDB) {
+        logInfo("bootstrapAuth: user from DB", userDB);
+        return setCurrentUser(userDB);
+      }
 
       const authUser = await getAuthFallbackUser();
       if (authUser) {
-        const fallback = {
+        const user = {
           id: authUser.id || uid,
           nombre:
             authUser.user_metadata?.nombre ||
@@ -370,19 +415,22 @@
           sucursal_id: authUser.app_metadata?.sucursal_id || authUser.user_metadata?.sucursal_id || null,
           email: authUser.email || null
         };
-        return setCurrentUser(fallback);
+        logInfo("bootstrapAuth: auth fallback", user);
+        return setCurrentUser(user);
       }
 
       const local = JSON.parse(localStorage.getItem("currentUser") || "null");
       if (local && (local.uid === uid || local.email)) {
-        return setCurrentUser({
+        const user = {
           id: local.uid || uid,
           nombre: local.name || local.nombre || local.email || "Usuario",
           role: local.role || "empleado",
           empresa_id: local.empresa_id || null,
           sucursal_id: local.sucursal_id || null,
           email: local.email || null
-        });
+        };
+        logInfo("bootstrapAuth: final local fallback", user);
+        return setCurrentUser(user);
       }
 
       return null;
@@ -409,7 +457,7 @@
         sign = 1;
       }
 
-      stockMap[productId] = Number(stockMap[productId] || 0) + (qty * sign);
+      stockMap[productId] = Number(stockMap[productId] || 0) + qty * sign;
     });
 
     return stockMap;
@@ -425,7 +473,7 @@
 
     ingredients.forEach((detail) => {
       const insumoId = detail.insumo_id;
-      const perRecipe = Number(detail.cantidad || 0) + Number(detail.desperdicio || 0);
+      const perRecipe = Number(detail.cantidad || 0);
       if (!insumoId || perRecipe <= 0) return;
 
       const perUnit = perRecipe / rendimiento;
@@ -440,97 +488,91 @@
     const supabase = getSupabase();
 
     try {
-      const { data: baseProducts, error } = await supabase
-        .from("productos")
-        .select("id,nombre,precio,sucursal_id,costo_promedio,activo,created_at,updated_at")
+      logInfo("loadProducts:start");
+
+      const { data: productsData, error: productsError } = await supabase
+        .from("v_productos_venta")
+        .select("id,producto_id,sucursal_id,nombre,precio,costo_promedio,activo,tipo_producto,categoria_venta,receta_id,receta_nombre,receta_descripcion,receta_rendimiento,receta_activa,created_at,updated_at")
         .order("nombre", { ascending: true });
 
-      if (error) throw error;
+      if (productsError) throw productsError;
 
-      const ids = (baseProducts || []).map((p) => p.id).filter(Boolean);
+      const baseProducts = Array.isArray(productsData) ? productsData : [];
+      const realProductIds = baseProducts.map((p) => p.producto_id || p.id).filter(Boolean);
 
-      const [movRes, insumoRes, preparadosRes] = await Promise.all([
-        ids.length
+      const preparedRows = baseProducts.filter(
+        (p) => String(p.tipo_producto || "").toLowerCase() === "trago_preparado" || p.receta_id
+      );
+
+      const recipeIds = [...new Set(preparedRows.map((r) => r.receta_id).filter(Boolean))];
+
+      const [movRes, recipeDetailsRes] = await Promise.all([
+        realProductIds.length
           ? supabase
               .from("movimientos_stock_base")
               .select("producto_id,tipo,cantidad")
-              .in("producto_id", ids)
+              .in("producto_id", realProductIds)
           : Promise.resolve({ data: [], error: null }),
-        ids.length
-          ? supabase
-              .from("productos_insumo")
-              .select("productos_insumo_id,unidad_medida")
-              .in("productos_insumo_id", ids)
-          : Promise.resolve({ data: [], error: null }),
-        ids.length
-          ? supabase
-              .from("productos_preparados")
-              .select("productos_preparados_id,receta_id")
-              .in("productos_preparados_id", ids)
-          : Promise.resolve({ data: [], error: null })
-      ]);
 
-      if (movRes.error) console.warn("loadProducts(movimientos_stock_base):", movRes.error);
-      if (insumoRes.error) console.warn("loadProducts(productos_insumo):", insumoRes.error);
-      if (preparadosRes.error) console.warn("loadProducts(productos_preparados):", preparadosRes.error);
-
-      const stockMap = aggregateStockFromMovements(movRes.data || []);
-      const insumoMap = Object.fromEntries((insumoRes.data || []).map((r) => [r.productos_insumo_id, r]));
-      const preparadosMap = Object.fromEntries((preparadosRes.data || []).map((r) => [r.productos_preparados_id, r]));
-      const recipeIds = [...new Set((preparadosRes.data || []).map((r) => r.receta_id).filter(Boolean))];
-      const [recipesRes, recipeDetailsRes] = await Promise.all([
-        recipeIds.length
-          ? supabase
-              .from("recetas")
-              .select("recetas_id,rendimiento,activa")
-              .in("recetas_id", recipeIds)
-          : Promise.resolve({ data: [], error: null }),
         recipeIds.length
           ? supabase
               .from("receta_detalle")
-              .select("receta_detalle_id,receta_id,insumo_id,cantidad,desperdicio")
+              .select("receta_id,insumo_id,cantidad,desperdicio")
               .in("receta_id", recipeIds)
           : Promise.resolve({ data: [], error: null })
       ]);
 
-      if (recipesRes.error) console.warn("loadProducts(recetas):", recipesRes.error);
+      if (movRes.error) console.warn("loadProducts(movimientos_stock_base):", movRes.error);
       if (recipeDetailsRes.error) console.warn("loadProducts(receta_detalle):", recipeDetailsRes.error);
 
-      const recipeMap = Object.fromEntries((recipesRes.data || []).map((r) => [r.recetas_id || r.id, r]));
+      const stockMap = aggregateStockFromMovements(movRes.data || []);
       const recipeDetailsByRecipe = {};
+
       (recipeDetailsRes.data || []).forEach((detail) => {
-        const recipeId = detail.receta_id;
-        if (!recipeId) return;
-        if (!recipeDetailsByRecipe[recipeId]) recipeDetailsByRecipe[recipeId] = [];
-        recipeDetailsByRecipe[recipeId].push(detail);
+        if (!detail.receta_id) return;
+        if (!recipeDetailsByRecipe[detail.receta_id]) recipeDetailsByRecipe[detail.receta_id] = [];
+        recipeDetailsByRecipe[detail.receta_id].push(detail);
       });
 
       state.productsCache = {};
+      state.productsByRealId = {};
+
       (baseProducts || []).forEach((row) => {
-        const isPrepared = Boolean(preparadosMap[row.id]);
-        const isInsumo = Boolean(insumoMap[row.id]);
-        const recipeId = preparadosMap[row.id]?.receta_id || null;
+        const uiId = String(row.id);
+        const realId = String(row.producto_id || row.id);
+        const tipo = String(row.tipo_producto || "").toLowerCase();
+        const isPrepared = tipo === "trago_preparado" || Boolean(row.receta_id);
+        const recipeId = row.receta_id || null;
         const recipeDetails = recipeDetailsByRecipe[recipeId] || [];
-        const preparedStock = isPrepared
-          ? calculatePreparedAvailability(recipeMap[recipeId], recipeDetails, stockMap)
+
+        const recipe = {
+          recetas_id: recipeId,
+          rendimiento: Number(row.receta_rendimiento || 1) || 1,
+          activa: row.receta_activa !== false
+        };
+
+        const preparedStock = isPrepared && recipe.activa
+          ? calculatePreparedAvailability(recipe, recipeDetails, stockMap)
           : null;
 
-        const tipo_producto = isPrepared
-          ? "trago_preparado"
-          : isInsumo
-            ? "insumo"
-            : "botella";
-
         const extra = {
-          stock: isPrepared ? preparedStock : (stockMap[row.id] || 0),
-          tipo_producto,
-          unidad_medida: insumoMap[row.id]?.unidad_medida || "unidad",
+          stock: isPrepared ? (preparedStock || 0) : (stockMap[realId] || 0),
+          tipo_producto: isPrepared ? "trago_preparado" : (tipo || "insumo"),
+          categoria_venta: row.categoria_venta || (isPrepared ? "Trago preparado" : "Producto individual"),
+          unidad_medida: "unidad",
           receta_id: recipeId,
+          receta_nombre: row.receta_nombre || "",
+          receta_descripcion: row.receta_descripcion || "",
+          receta_rendimiento: row.receta_rendimiento || 0,
+          receta_activa: row.receta_activa,
           recipe_details: recipeDetails
         };
 
-        const p = normalizeProduct(row, extra);
-        state.productsCache[p.id] = p;
+        const p = normalizeProduct({ ...row, id: uiId, producto_id: realId }, extra);
+        state.productsCache[String(p.id)] = p;
+        if (p.producto_id) {
+          state.productsByRealId[String(p.producto_id)] = p;
+        }
       });
 
       return Object.values(state.productsCache);
@@ -550,7 +592,7 @@
     try {
       const { data, error } = await supabase
         .from("clientes_vip")
-        .select("id,sucursal_id,notas,activo,fecha_alta,created_at,updated_at,contacto_id")
+        .select("clientes_vip_id:id,sucursal_id,notas,activo,fecha_alta,created_at,updated_at,contacto_id")
         .order("fecha_alta", { ascending: false });
 
       if (error) {
@@ -558,15 +600,13 @@
         return [];
       }
 
-      const contactIds = (data || [])
-        .map((c) => c.contacto_id)
-        .filter(Boolean);
-
+      const contactIds = (data || []).map((c) => c.contacto_id).filter(Boolean);
       const contactsMap = contactIds.length
         ? await fetchManyByIds(
             "contactos",
             contactIds,
-            "id,nombre,telefono,email,identificacion,direccion,created_at,updated_at"
+            "contactos_id:id,nombre,telefono,email,identificacion,direccion,created_at,updated_at",
+            "contactos_id"
           )
         : {};
 
@@ -588,50 +628,169 @@
     }
   }
 
-  async function loadSales() {
+  function summarizeSalesCosts(rows = []) {
+    return rows.reduce((acc, row) => {
+      acc.ventas_realizadas += 1;
+      acc.subtotal_vendido += toNumber(row.subtotal);
+      acc.descuentos_totales += toNumber(row.descuento);
+      acc.impuestos_totales += toNumber(row.impuesto);
+      acc.total_vendido += toNumber(row.total);
+      acc.costo_estandar_total += toNumber(row.costo_estandar_total);
+      acc.costo_real_total += toNumber(row.costo_real_total);
+      return acc;
+    }, {
+      ventas_realizadas: 0,
+      subtotal_vendido: 0,
+      descuentos_totales: 0,
+      impuestos_totales: 0,
+      total_vendido: 0,
+      costo_estandar_total: 0,
+      costo_real_total: 0
+    });
+  }
+
+  async function getSalesCostSummaryBetween(startDate, endDate) {
+    const supabase = getSupabase();
+
+    try {
+      let query = supabase
+        .from("v_ventas")
+        .select("id,usuario_id,usuario_nombre,subtotal,descuento,impuesto,total,estado,created_at,costo_estandar_total,costo_real_total")
+        .eq("estado", "finalizada")
+        .order("created_at", { ascending: false });
+
+      if (startDate) query = query.gte("created_at", toIso(startDate));
+      if (endDate) query = query.lt("created_at", toIso(endDate));
+
+      const { data, error } = await query;
+
+      if (error) {
+        logError("getSalesCostSummaryBetween(v_ventas)", error, { startDate, endDate });
+        return null;
+      }
+
+      const rows = Array.isArray(data) ? data : [];
+      const summary = summarizeSalesCosts(rows);
+
+      return {
+        ...summary,
+        utilidad_bruta_estandar: roundTo2(summary.total_vendido - summary.costo_estandar_total),
+        utilidad_bruta_real: roundTo2(summary.total_vendido - summary.costo_real_total),
+        start_date: startDate ? toIso(startDate) : null,
+        end_date: endDate ? toIso(endDate) : null
+      };
+    } catch (err) {
+      logError("getSalesCostSummaryBetween(catch)", err, { startDate, endDate });
+      return null;
+    }
+  }
+
+  function roundTo2(n) {
+    return Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
+  }
+
+  async function loadReservationSales(limit = 50) {
     const supabase = getSupabase();
 
     try {
       const { data, error } = await supabase
-        .from("ventas")
-        .select("id,subtotal,descuento,impuesto,total,metodo_pago,estado,observacion,created_at,usuario_id,cliente_vip_id,evento_id")
-        .eq("estado", "finalizada")
+        .from("v_reservaciones_ventas")
+        .select("id,evento_id,evento_nombre,mesa_id,numero_mesa,cliente_vip_id,nombre_reserva,responsable_nombre,usuario_reserva_id,usuario_reserva_nombre,monto_reserva,estado,created_at,observacion")
+        .neq("estado", "cancelada")
         .order("created_at", { ascending: false })
-        .limit(50);
+        .limit(limit);
 
+      if (error) {
+        logError("loadReservationSales(v_reservaciones_ventas)", error);
+        return [];
+      }
+
+      return (data || []).map((row) => {
+        const total = Number(row.monto_reserva || 0) || 0;
+        const reservationName = row.evento_nombre || row.nombre_reserva || "Reserva";
+
+        return normalizeVenta({
+          id: `reserva_${row.id}`,
+          kind: "reserva",
+          subtotal: total,
+          descuento: 0,
+          impuesto: 0,
+          total,
+          metodo_pago: "reserva",
+          estado: String(row.estado || "pendiente").toLowerCase() === "finalizada" ? "finalizada" : "reserva",
+          observacion: row.observacion || null,
+          usuario_id: null,
+          cliente_vip_id: row.cliente_vip_id || null,
+          evento_id: row.evento_id || null,
+          created_at: row.created_at,
+          nombre_reserva: reservationName,
+          usuario_reserva_nombre: row.usuario_reserva_nombre || row.responsable_nombre || "-",
+          costo_estandar_total: 0,
+          costo_real_total: 0,
+          costo_estandar_unitario: 0,
+          costo_real_unitario: 0,
+          venta_detalle: [
+            {
+              id: `reserva_detalle_${row.id}`,
+              venta_id: `reserva_${row.id}`,
+              producto_id: null,
+              producto_nombre: reservationName,
+              cantidad: 1,
+              precio_unitario: total,
+              total_linea: total,
+              costo_unitario: 0,
+              costo_total: 0,
+              costo_estandar_unitario: 0,
+              costo_estandar_total: 0,
+              costo_real_unitario: 0,
+              costo_real_total: 0,
+              productos: {
+                nombre: reservationName
+              }
+            }
+          ]
+        });
+      });
+    } catch (err) {
+      logError("loadReservationSales(catch)", err);
+      return [];
+    }
+  }
+
+  async function loadSales() {
+    const supabase = getSupabase();
+
+    try {
+      const [salesRes, reservationSales] = await Promise.all([
+        supabase
+          .from("v_ventas")
+          .select("id,usuario_id,usuario_nombre,total,estado,created_at,costo_estandar_total,costo_real_total")
+          .eq("estado", "finalizada")
+          .order("created_at", { ascending: false })
+          .limit(50),
+        loadReservationSales(50)
+      ]);
+
+      const { data, error } = salesRes;
       if (error) throw error;
 
       const sales = (data || []).map(normalizeVenta);
       const saleIds = sales.map((s) => s.id).filter(Boolean);
 
-      if (!saleIds.length) return sales;
-
       let details = [];
-      const { data: detailsData, error: detailsError } = await supabase
-        .from("venta_detalle")
-        .select("id,venta_id,producto_id,cantidad,precio_unitario,total_linea,costo_unitario,receta_id")
-        .in("venta_id", saleIds);
+      if (saleIds.length) {
+        const { data: detailsData, error: detailsError } = await supabase
+          .from("v_venta_detalle")
+          .select("id,venta_id,producto_id,producto_nombre,cantidad,precio_unitario,total_linea,receta_id,costo_estandar_unitario,costo_estandar_total,costo_real_unitario,costo_real_total,created_at")
+          .in("venta_id", saleIds);
 
-      if (detailsError) {
-        console.warn("No fue posible cargar venta_detalle:", detailsError);
-      } else {
-        details = (Array.isArray(detailsData) ? detailsData : []).map((detail) => ({
-          ...detail,
-          costo_total: Number(detail.costo_unitario || 0) * Number(detail.cantidad || 0)
-        }));
-      }
-
-      const prodIds = [...new Set(details.map((d) => d.producto_id).filter(Boolean))];
-      let productsMap = {};
-
-      if (prodIds.length) {
-        const { data: productsData, error: productsError } = await supabase
-          .from("productos")
-          .select("id,nombre")
-          .in("id", prodIds);
-
-        if (!productsError) {
-          productsMap = Object.fromEntries((productsData || []).map((p) => [p.id, p]));
+        if (detailsError) {
+          console.warn("No fue posible cargar v_venta_detalle:", detailsError);
+        } else {
+          details = (Array.isArray(detailsData) ? detailsData : []).map((detail) => ({
+            ...detail,
+            costo_total: Number(detail.costo_unitario || 0) * Number(detail.cantidad || 0)
+          }));
         }
       }
 
@@ -641,15 +800,19 @@
         detailsBySale[row.venta_id].push({
           ...row,
           productos: {
-            nombre: productsMap[row.producto_id]?.nombre || null
+            nombre: row.producto_nombre || null
           }
         });
       });
 
-      return sales.map((sale) => ({
-        ...sale,
-        venta_detalle: detailsBySale[sale.id] || []
-      }));
+      return sales
+        .map((sale) => ({
+          ...sale,
+          venta_detalle: detailsBySale[sale.id] || []
+        }))
+        .concat(reservationSales)
+        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+        .slice(0, 50);
     } catch (e) {
       console.error("Error cargando ventas:", e);
       return [];
@@ -679,15 +842,15 @@
 
       const { data: userData } = await supabase
         .from("usuarios")
-        .select("id,contacto_id")
-        .eq("id", userId)
+        .select("usuarios_id:id,contacto_id")
+        .eq("usuarios_id", userId)
         .maybeSingle();
 
       if (userData?.contacto_id) {
         const { data: contact } = await supabase
           .from("contactos")
           .select("nombre")
-          .eq("id", userData.contacto_id)
+          .eq("contactos_id", userData.contacto_id)
           .maybeSingle();
 
         state.usersCache[userId] = contact?.nombre || "Desconocido";
@@ -718,8 +881,8 @@
 
     try {
       let query = supabase
-        .from("ventas")
-        .select("id,usuario_id,subtotal,descuento,impuesto,total,metodo_pago,estado,observacion,created_at,cliente_vip_id,evento_id")
+        .from("v_ventas")
+        .select("id,usuario_id,usuario_nombre,subtotal,descuento,impuesto,total,metodo_pago,estado,observacion,created_at,cliente_vip_id,evento_id,costo_estandar_total,costo_real_total")
         .eq("estado", "finalizada")
         .order("created_at", { ascending: false });
 
@@ -729,7 +892,7 @@
       const { data, error } = await query;
 
       if (error) {
-        logError("getSalesBetween(ventas)", error, { startDate, endDate });
+        logError("getSalesBetween(v_ventas)", error, { startDate, endDate });
         return [];
       }
 
@@ -758,7 +921,7 @@
     try {
       const { data, error } = await supabase
         .from("ventas")
-        .select("usuario_id,subtotal,descuento,impuesto,total,created_at,estado")
+        .select("ventas_id:id,usuario_id,subtotal,descuento,impuesto,total,created_at,estado")
         .eq("estado", "finalizada");
 
       if (error) {
@@ -832,53 +995,50 @@
     }
   }
 
-  async function getPeriodReport(viewName, fieldName, dateValue) {
-    const supabase = getSupabase();
-    const key = dateValue instanceof Date ? dateValue.toISOString().slice(0, 10) : String(dateValue || "");
-
-    try {
-      const { data, error } = await supabase
-        .from(viewName)
-        .select("*")
-        .eq(fieldName, key)
-        .maybeSingle();
-
-      if (error) {
-        logError(`getPeriodReport(${viewName})`, error, { fieldName, key });
-        return null;
-      }
-
-      return data || null;
-    } catch (err) {
-      logError(`getPeriodReport(${viewName})(catch)`, err, { fieldName, key });
-      return null;
-    }
-  }
-
   async function getDailyReport(dateValue = new Date()) {
-    return getPeriodReport("v_ventas_diarias", "fecha", dateValue);
+    const start = dateOnly(dateValue);
+    const end = getTomorrowStart.call({}); // evita el lint si tu entorno es estricto
+    const summary = await getSalesCostSummaryBetween(start, getTomorrowStart());
+    return summary ? {
+      fecha: start.toISOString().slice(0, 10),
+      periodo: start.toISOString().slice(0, 10),
+      ...summary
+    } : null;
   }
 
   async function getWeeklyReport(dateValue = new Date()) {
-    return getPeriodReport("v_ventas_semanales", "semana_inicio", getWeekStart(dateValue));
+    const start = getWeekStart(dateValue);
+    const end = getNextWeekStart(dateValue);
+    const summary = await getSalesCostSummaryBetween(start, end);
+    return summary ? {
+      semana_inicio: start.toISOString().slice(0, 10),
+      semana_fin: new Date(end.getTime() - 86400000).toISOString().slice(0, 10),
+      periodo: `${start.toISOString().slice(0, 10)} / ${new Date(end.getTime() - 86400000).toISOString().slice(0, 10)}`,
+      ...summary
+    } : null;
   }
 
   async function getMonthlyReport(dateValue = new Date()) {
-    return getPeriodReport("v_ventas_mensuales", "mes_inicio", getMonthStart(dateValue));
+    const start = getMonthStart(dateValue);
+    const end = getNextMonthStart(dateValue);
+    const summary = await getSalesCostSummaryBetween(start, end);
+    return summary ? {
+      mes_inicio: start.toISOString().slice(0, 10),
+      periodo: start.toISOString().slice(0, 7),
+      ...summary
+    } : null;
   }
 
   async function getMonthlyProductSalesMap() {
     const supabase = getSupabase();
-    const monthStart = getMonthStart();
-    const nextMonthStart = getNextMonthStart();
 
     try {
       const { data: sales, error: salesError } = await supabase
         .from("ventas")
-        .select("id")
+        .select("ventas_id:id,subtotal,descuento,impuesto,total,metodo_pago,estado,observacion,created_at,usuario_id,cliente_vip_id,evento_id")
         .eq("estado", "finalizada")
-        .gte("created_at", toIso(monthStart))
-        .lt("created_at", toIso(nextMonthStart));
+        .order("created_at", { ascending: false })
+        .limit(50);
 
       if (salesError) {
         logError("getMonthlyProductSalesMap(ventas)", salesError);
@@ -931,12 +1091,15 @@
   }
 
   function clearCart() {
+    logInfo("clearCart", { itemsBefore: state.cart.length });
     state.cart = [];
   }
 
   function removeCartItem(index) {
     if (index < 0 || index >= state.cart.length) return false;
+    const removed = state.cart[index];
     state.cart.splice(index, 1);
+    logInfo("removeCartItem", { index, removed });
     return true;
   }
 
@@ -964,13 +1127,14 @@
   }
 
   function canReserveProductQty(productId, qty, ignoreIndex = null) {
-    const prod = state.productsCache[productId];
+    const prod = getProductByKey(productId);
     if (!prod) {
+      console.log("[SalesModel] canReserveProductQty -> producto no encontrado", { productId, qty });
       return { ok: false, message: "Producto no encontrado" };
     }
 
     const requested = Number(qty || 0);
-    const reservedOther = getCartReservedQuantity(productId, ignoreIndex);
+    const reservedOther = getCartReservedQuantity(String(productId), ignoreIndex);
     const available = Number(prod.stock || 0);
 
     if ((reservedOther + requested) > available) {
@@ -988,13 +1152,13 @@
     const comboQty = Number(qty || 0);
 
     for (const comp of combo.components) {
-      const prod = state.productsCache[comp.productId];
+      const prod = getProductByKey(String(comp.productId));
       if (!prod) {
         return { ok: false, message: `No existe el producto "${comp.nombre || comp.productId}"` };
       }
 
       const required = Number(comp.cantidad || 0) * comboQty;
-      const reservedOther = getCartReservedQuantity(comp.productId, ignoreIndex);
+      const reservedOther = getCartReservedQuantity(String(comp.productId), ignoreIndex);
       const available = Number(prod.stock || 0);
 
       if ((reservedOther + required) > available) {
@@ -1034,9 +1198,10 @@
   }
 
   function addToCart(productId, qty = 1) {
-    const prod = state.productsCache[productId];
+    const key = String(productId || "");
+    const prod = getProductByKey(key);
 
-    if (!productId) {
+    if (!key) {
       return { ok: false, message: "Selecciona un producto" };
     }
 
@@ -1049,11 +1214,13 @@
     }
 
     const cantidad = Math.max(1, Number(qty || 1));
-    const currentInCart = state.cart.find((i) => i.kind === "product" && String(i.productId) === String(productId));
+    const currentInCart = state.cart.find((i) => i.kind === "product" && String(i.productId) === key);
     const already = currentInCart ? Number(currentInCart.cantidad || 0) : 0;
 
-    const check = canReserveProductQty(productId, already + cantidad, null);
-    if (!check.ok) return check;
+    const check = canReserveProductQty(key, already + cantidad, null);
+    if (!check.ok) {
+      return check;
+    }
 
     if (currentInCart) {
       currentInCart.cantidad += cantidad;
@@ -1061,7 +1228,8 @@
     } else {
       state.cart.push({
         kind: "product",
-        productId,
+        productId: key,
+        saleProductId: String(prod.producto_id || prod.id),
         tipo_producto: prod.tipo_producto || "insumo",
         nombre: prod.nombre,
         precio_unitario: Number(prod.precio || 0),
@@ -1088,7 +1256,7 @@
 
     const id = combo.id || `combo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    state.cart.push({
+    const newCombo = {
       kind: "combo",
       comboId: id,
       nombre: combo.nombre,
@@ -1096,11 +1264,13 @@
       cantidad,
       total: Number(combo.precio_unitario || 0) * cantidad,
       components: combo.components.map((c) => ({
-        productId: c.productId,
+        productId: String(c.productId),
         nombre: c.nombre,
         cantidad: Number(c.cantidad || 0)
       }))
-    });
+    };
+
+    state.cart.push(newCombo);
 
     return { ok: true, message: "Combo añadido" };
   }
@@ -1118,7 +1288,7 @@
         const componentText = [];
 
         item.components.forEach((comp) => {
-          const prod = state.productsCache[comp.productId];
+          const prod = getProductByKey(String(comp.productId));
           const unitPrice = Number(prod?.precio ?? 0);
           const lineQty = Number(comp.cantidad || 0) * comboQty;
           const lineTotal = unitPrice * lineQty;
@@ -1126,7 +1296,7 @@
           componentText.push(`${prod?.nombre || comp.nombre} x${lineQty}`);
 
           items.push({
-            producto_id: comp.productId,
+            producto_id: String(prod?.producto_id || prod?.id || comp.productId),
             cantidad: lineQty,
             precio_unitario: unitPrice
           });
@@ -1138,7 +1308,7 @@
       }
 
       items.push({
-        producto_id: item.productId,
+        producto_id: String(item.saleProductId || item.productId),
         cantidad: Number(item.cantidad || 0),
         precio_unitario: Number(item.precio_unitario || 0)
       });
@@ -1159,50 +1329,50 @@
       observacion = null
     } = options;
 
-    if (!state.cart.length) {
-      return { ok: false, message: "Carrito vacío" };
+    try {
+      if (!state.cart.length) {
+        return { ok: false, message: "Carrito vacío" };
+      }
+
+      if (!state.currentUser) {
+        state.currentUser = await bootstrapAuth();
+      }
+
+      const currentUser = state.currentUser;
+
+      const empresaId = String(currentUser?.empresa_id || global.adminEmpresa || "").trim();
+      const sucursalId = String(currentUser?.sucursal_id || global.adminSucursal || "").trim();
+      const usuarioId = String(currentUser?.id || "").trim();
+
+      if (!currentUser || !usuarioId || !empresaId || !sucursalId) {
+        return { ok: false, message: "No se pudo detectar la sesión, empresa o sucursal del usuario." };
+      }
+
+      const expanded = expandCartForSale();
+
+      const payload = {
+        p_empresa_id: empresaId,
+        p_sucursal_id: sucursalId,
+        p_usuario_id: usuarioId,
+        p_metodo_pago: String(metodoPago || "efectivo"),
+        p_descuento: Number(descuento || 0) + Number(expanded.discount || 0),
+        p_impuesto: Number(impuesto || 0),
+        p_observacion: [expanded.observacion, observacion].filter(Boolean).join(" | ") || null,
+        p_items: expanded.items
+      };
+
+      const supabase = getSupabase();
+      const { data, error } = await supabase.rpc("registrar_venta_app", payload);
+
+      if (error) throw error;
+      if (!data) throw new Error("No se pudo registrar la venta.");
+
+      clearCart();
+
+      return { ok: true, data };
+    } catch (e) {
+      return { ok: false, message: e.message || "No se pudo finalizar la venta." };
     }
-
-    if (!state.currentUser) {
-      state.currentUser = await bootstrapAuth();
-    }
-
-    const currentUser = state.currentUser;
-
-    const empresaId = String(currentUser?.empresa_id || global.adminEmpresa || "").trim();
-    const sucursalId = String(currentUser?.sucursal_id || global.adminSucursal || "").trim();
-    const usuarioId = String(currentUser?.id || "").trim();
-
-    if (!currentUser || !usuarioId || !empresaId || !sucursalId) {
-      return { ok: false, message: "No se pudo detectar la sesión, empresa o sucursal del usuario." };
-    }
-
-    const expanded = expandCartForSale();
-
-    const payload = {
-      p_empresa_id: empresaId,
-      p_sucursal_id: sucursalId,
-      p_usuario_id: usuarioId,
-      p_metodo_pago: String(metodoPago || "efectivo"),
-      p_descuento: Number(descuento || 0) + Number(expanded.discount || 0),
-      p_impuesto: Number(impuesto || 0),
-      p_observacion: [expanded.observacion, observacion].filter(Boolean).join(" | ") || null,
-      p_items: expanded.items
-    };
-
-    const supabase = getSupabase();
-    const { data, error } = await supabase.rpc("registrar_venta_app", payload);
-
-    if (error) {
-      throw error;
-    }
-
-    if (!data) {
-      throw new Error("No se pudo registrar la venta.");
-    }
-
-    clearCart();
-    return { ok: true, data };
   }
 
   function saveDraft() {
@@ -1278,12 +1448,15 @@
     normalizeProduct,
     normalizeVenta,
     saleDetailText,
+    saleLabel,
     bootstrapAuth,
     setCurrentUser,
     getCurrentUser,
     getProducts,
     loadProducts,
+    getVipClients,
     loadSales,
+    loadReservationSales,
     fetchUserName,
     getCart,
     getSubtotal,
@@ -1297,6 +1470,8 @@
     saveDraft,
     subscribeRealtime,
     cleanupRealtime,
+    canReserveProductQty,
+    canReserveComboQty,
     getSalesBetween,
     getSalesForToday,
     getSalesForWeek,
@@ -1306,11 +1481,13 @@
     getWeeklyReport,
     getMonthlyReport,
     getMonthlyProductSalesMap,
+    getSalesCostSummaryBetween,
     getTodayStart,
     getTomorrowStart,
     getMonthStart,
     getNextMonthStart,
     getWeekStart,
-    getNextWeekStart
+    getNextWeekStart,
+    getProductByKey
   };
 })(window);
