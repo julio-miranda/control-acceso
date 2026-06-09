@@ -998,10 +998,28 @@
           ? parseTimeString(d.salida_time)
           : (parseTimeString(salida_raw) || null);
 
-        const esEntradaConsentida = entrada_raw === "Consentida";
-        const esSalidaConsentida = salida_raw === "Consentida";
+        const esEntradaConsentida =
+          entrada_raw.toLowerCase() === "consentida";
 
-        if (!entrada_time_norm && !esEntradaConsentida) return;
+        const esSalidaConsentida =
+          salida_raw.toLowerCase() === "consentida";
+
+        const entradaValida =
+          !!entrada_time_norm || esEntradaConsentida;
+
+        const salidaValida =
+          !!salida_time_norm || esSalidaConsentida;
+
+        /*
+          Casos válidos:
+          - entrada registrada + salida registrada
+          - entrada consentida + salida registrada
+          - entrada registrada + salida consentida
+          - entrada consentida + salida consentida
+        */
+        if (!entradaValida || !salidaValida) {
+          return;
+        }
 
         if (!grupos[uid]) {
           grupos[uid] = createPayrollGroup();
@@ -1016,15 +1034,23 @@
         if (!jm) return;
 
         const jornadaStart = crearFechaCompleta(d.fecha, jm.start);
-        const jornadaEnd = crearFechaCompleta(d.fecha, jm.end);
+        let jornadaEnd = crearFechaCompleta(d.fecha, jm.end);
+
+        if (jornadaEnd <= jornadaStart) {
+          jornadaEnd.setDate(jornadaEnd.getDate() + 1);
+        }
 
         let realStart = esEntradaConsentida
           ? jornadaStart
           : (entrada_time_norm ? crearFechaCompleta(d.fecha, entrada_time_norm) : jornadaStart);
 
-        let realEnd = null;
-        if (esSalidaConsentida) realEnd = jornadaEnd;
-        else if (salida_time_norm) realEnd = crearFechaCompleta(d.fecha, salida_time_norm);
+        let realEnd = esSalidaConsentida
+          ? new Date(jornadaEnd)
+          : crearFechaCompleta(d.fecha, salida_time_norm);
+
+        if (realEnd && realEnd <= realStart) {
+          realEnd.setDate(realEnd.getDate() + 1);
+        }
 
         if (realEnd && realEnd < realStart) realEnd = null;
 

@@ -1,3 +1,4 @@
+// js/controllers/employee.controller.js
 (function (global) {
   const allowedRadius = 50;
   const HTML5_QRCODE_CDN =

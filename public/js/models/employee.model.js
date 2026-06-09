@@ -1,3 +1,4 @@
+// js/models/employee.model.js
 (function (global) {
   const state = {
     allowedLat: null,
