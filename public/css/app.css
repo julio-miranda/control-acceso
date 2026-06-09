@@ -486,25 +486,6 @@ textarea {
     max-height: 70vh;
 }
 
-#empleadosTable {
-    width: max-content !important;
-    min-width: 2200px;
-}
-
-#empleadosTable th,
-#empleadosTable td {
-    white-space: nowrap;
-}
-
-#empleadosTable_wrapper {
-    width: 100%;
-}
-
-#empleadosTable_wrapper .dataTables_scrollBody {
-    overflow-x: auto !important;
-    overflow-y: auto !important;
-}
-
 /* TABLA */
 .table,
 table,
