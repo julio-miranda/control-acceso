@@ -479,178 +479,132 @@ textarea {
 
 /* ---------- TABLAS ---------- */
 
-/* El contenedor NO debe manejar scroll */
 .table-container {
-  width: 100%;
-  overflow: hidden;
-  position: relative;
-  border-radius: var(--radius);
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: auto;
+    max-height: 70vh;
 }
 
-/*
-  El scroll pertenece a la tabla.
-  display:block permite overflow real.
-*/
+#empleadosTable {
+    width: max-content !important;
+    min-width: 2200px;
+}
+
+#empleadosTable th,
+#empleadosTable td {
+    white-space: nowrap;
+}
+
+#empleadosTable_wrapper {
+    width: 100%;
+}
+
+#empleadosTable_wrapper .dataTables_scrollBody {
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+}
+
+/* TABLA */
 .table,
 table,
 table.dataTable {
-  display: block;
-  width: max-content !important;
-  min-width: 100% !important;
+    width: max-content !important;
+    min-width: 100% !important;
 
-  overflow-x: auto;
-  overflow-y: auto;
+    border-collapse: collapse;
+    table-layout: auto;
 
-  max-width: 100%;
-  max-height: 70vh;
+    background: #fff;
 
-  border-collapse: collapse;
-  table-layout: auto !important;
-
-  background: #fff;
-
-  scrollbar-gutter: stable;
+    margin: 0;
 }
 
-/* Estructura interna */
-table.dataTable thead,
-table.dataTable tbody,
+/* FILAS */
+.table tr,
 table.dataTable tr {
-  width: 100%;
+    display: table-row;
 }
 
-/* Celdas */
-table.dataTable th,
-table.dataTable td,
+/* CELDAS */
 .table th,
-.table td {
-  box-sizing: border-box;
-  vertical-align: middle;
-  white-space: nowrap;
+.table td,
+table.dataTable th,
+table.dataTable td {
+    padding: 10px 12px;
+
+    vertical-align: middle;
+    box-sizing: border-box;
+
+    white-space: nowrap;
 }
 
-/* Encabezados */
+/* ENCABEZADOS */
 .table thead th,
 table.dataTable thead th {
-  position: sticky;
-  top: 0;
-  z-index: 5;
+    position: sticky;
+    top: 0;
+    z-index: 10;
 
-  background: var(--primary);
-  color: #fff;
+    background: var(--primary);
+    color: #fff;
 
-  padding: 12px 10px;
+    text-align: center;
+    font-weight: 700;
 
-  text-align: center;
-  font-weight: 700;
-
-  border-top: 0 !important;
-  border-bottom: 0 !important;
-
-  white-space: nowrap;
-  word-break: normal;
-
-  line-height: 1.2;
-
-  box-shadow: none !important;
-  background-image: none !important;
+    border-bottom: 0 !important;
 }
 
-/* Body */
-.table td,
+/* CUERPO */
+.table tbody td,
 table.dataTable tbody td {
-  padding: 11px 10px;
-
-  border-bottom: 1px solid #eef2f7;
-
-  text-align: left;
-  vertical-align: middle;
-
-  line-height: 1.25;
-
-  white-space: nowrap;
-
-  background: #fff;
+    border-bottom: 1px solid #eef2f7;
 }
 
 /* Hover */
-table.dataTable tbody tr:hover,
-.table tbody tr:hover {
-  background: #f8fafc;
-}
-
-/* Acciones */
-.table td:last-child,
-table.dataTable td:last-child {
-  white-space: nowrap;
+.table tbody tr:hover,
+table.dataTable tbody tr:hover {
+    background: #f8fafc;
 }
 
 /* ---------- DATATABLES ---------- */
 
-/*
-  Wrapper SIN scroll.
-*/
 .dataTables_wrapper {
-  width: 100%;
-  margin: 10px;
-  padding: 12px;
+    width: 100%;
+    margin: 10px;
+    padding: 12px;
 
-  overflow: visible !important;
+    overflow: visible !important;
 }
 
-/*
-  Elimina el sistema de scroll interno
-  que rompe alineaciones.
-*/
-.dataTables_scroll,
-.dataTables_scrollHead,
-.dataTables_scrollBody,
-.dataTables_scrollHeadInner {
-  all: unset !important;
-}
-
-/*
-  Fuerza que DataTables use la tabla real.
-*/
-.dataTables_wrapper table.dataTable {
-  display: block;
-
-  width: max-content !important;
-  min-width: 100% !important;
-
-  margin: 0 !important;
-
-  border-spacing: 0;
-}
-
-/* Inputs DataTables */
+/* Inputs */
 .dataTables_wrapper .dataTables_filter,
 .dataTables_wrapper .dataTables_length,
 .dataTables_wrapper .dataTables_info,
 .dataTables_wrapper .dataTables_paginate {
-  margin-top: 12px;
-  margin-bottom: 12px;
+    margin-top: 12px;
+    margin-bottom: 12px;
 }
 
 .dataTables_wrapper select,
 .dataTables_wrapper input {
-  border: 1px solid #d8e0ea;
-  border-radius: 6px;
-  padding: 6px 10px;
+    border: 1px solid #d8e0ea;
+    border-radius: 6px;
+    padding: 6px 10px;
 }
 
-/* Limpieza visual */
-table.dataTable.no-footer,
-table.dataTable {
-  border-top: 0 !important;
-  border-bottom: 0 !important;
-  outline: none !important;
+/* Limpieza */
+table.dataTable,
+table.dataTable.no-footer {
+    border-top: 0 !important;
+    border-bottom: 0 !important;
+    outline: none !important;
 }
 
 table.dataTable thead th,
 table.dataTable thead td {
-  border-bottom: 0 !important;
-  box-shadow: none !important;
+    border-bottom: 0 !important;
+    box-shadow: none !important;
 }
 
 /* ---------- SELECT2 ---------- */

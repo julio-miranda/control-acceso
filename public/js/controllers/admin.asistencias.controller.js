@@ -289,8 +289,9 @@
     getDataTable(selector, order = [[1, "desc"]]) {
       try {
         const tbl = $(selector).DataTable({
-          destroy: true,
-          scrollX: false,
+          responsive: false,
+          scrollX: true,
+          autoWidth: false,
           order
         });
         tbl.clear();

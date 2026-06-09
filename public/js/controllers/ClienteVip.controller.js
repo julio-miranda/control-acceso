@@ -414,14 +414,13 @@
         }
 
         this.dataTable = $jq(this.els.table).DataTable({
+          responsive: false,
+          scrollX: true,
+          autoWidth: false,
           destroy: true,
           data: this.tableRows,
-          autoWidth: false,
-          responsive: false,
-          scrollX: false,
-          scrollCollapse: false,
           deferRender: true,
-          searching: true,
+          searching: false,
           paging: true,
           info: true,
           lengthChange: true,
@@ -438,10 +437,6 @@
             { data: "estadoHtml", defaultContent: "" },
             { data: "notas", defaultContent: "" },
             { data: "accionesHtml", defaultContent: "" }
-          ],
-          columnDefs: [
-            { targets: [6], orderable: false, searchable: false, className: "dt-center" },
-            { targets: [8], orderable: false, searchable: false, className: "dt-center" }
           ],
           language: {
             emptyTable: "No hay clientes VIP",

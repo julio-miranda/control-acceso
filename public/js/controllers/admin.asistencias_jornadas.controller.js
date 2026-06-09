@@ -88,8 +88,9 @@
         return $(selector).DataTable();
       }
       return $(selector).DataTable({
-        destroy: true,
-        scrollX: true
+          responsive: false,
+          scrollX: true,
+          autoWidth: false,
       });
     } catch (e) {
       console.warn("No se pudo inicializar DataTable:", e);
