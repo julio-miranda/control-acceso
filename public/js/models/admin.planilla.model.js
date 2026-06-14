@@ -311,7 +311,7 @@
 
       const { data: viewUser, error: viewError } = await supabase
         .from("v_usuarios")
-        .select("id,nombre,email,telefono,direccion,role,sucursal_id,empresa_id,created_at")
+        .select("id,nombre,email,telefono,direccion,role,sucursal_id,empresa_id,created_at,ayuda_economica,bonificacion")
         .eq("id", userId)
         .maybeSingle();
 
@@ -321,13 +321,15 @@
         return {
           ...viewUser,
           role: String(viewUser.role || "empleado").toLowerCase(),
+          ayuda_economica: roundMoney(viewUser.ayuda_economica || 0),
+          bonificacion: roundMoney(viewUser.bonificacion || 0),
           incomplete_profile: false
         };
       }
 
       const { data: user, error } = await supabase
         .from("usuarios")
-        .select("id,role,sucursal_id,contacto_id,created_at,updated_at,afp,isss,salario_h,descripcion")
+        .select("id,role,sucursal_id,contacto_id,created_at,updated_at,afp,isss,salario_h,descripcion,ayuda_economica,bonificacion")
         .eq("id", userId)
         .maybeSingle();
 
@@ -360,6 +362,8 @@
           salario_h: 0,
           afp: null,
           isss: null,
+          ayuda_economica: 0,
+          bonificacion: 0,
           incomplete_profile: true
         };
       }
@@ -423,6 +427,8 @@
         salario_h: toNumber(user.salario_h),
         afp: user.afp || null,
         isss: user.isss || null,
+        ayuda_economica: roundMoney(user.ayuda_economica || 0),
+        bonificacion: roundMoney(user.bonificacion || 0),
         incomplete_profile: false
       };
     } catch (err) {
@@ -442,6 +448,8 @@
         salario_h: 0,
         afp: null,
         isss: null,
+        ayuda_economica: 0,
+        bonificacion: 0,
         incomplete_profile: true
       };
     }
@@ -556,7 +564,7 @@
     const clientIds = [...new Set((rows || []).map(r => r.cliente_vip_id).filter(Boolean))];
 
     const [usersMap, clientsMap] = await Promise.all([
-      fetchManyByIds("usuarios", userIds, "id,role,sucursal_id,contacto_id,created_at,updated_at"),
+      fetchManyByIds("usuarios", userIds, "id,role,sucursal_id,contacto_id,created_at,updated_at,ayuda_economica,bonificacion"),
       fetchManyByIds("clientes_vip", clientIds, "id,sucursal_id,notas,activo,fecha_alta,created_at,updated_at,contacto_id")
     ]);
 
@@ -900,7 +908,7 @@
     try {
       let baseQuery = supabase
         .from("v_usuarios")
-        .select("id,empresa_id,sucursal_id,role")
+        .select("id,empresa_id,sucursal_id,role,ayuda_economica,bonificacion")
         .eq("role", "empleado");
 
       if (global.adminEmpresa) baseQuery = baseQuery.eq("empresa_id", global.adminEmpresa);
@@ -921,7 +929,7 @@
 
       const { data: empSnap, error: empErr } = await supabase
         .from("usuarios")
-        .select("id,role,sucursal_id,contacto_id,created_at,updated_at,afp,isss,salario_h,descripcion")
+        .select("id,role,sucursal_id,contacto_id,created_at,updated_at,afp,isss,salario_h,descripcion,ayuda_economica,bonificacion")
         .in("id", baseIds);
 
       if (empErr) throw empErr;
@@ -1010,13 +1018,6 @@
         const salidaValida =
           !!salida_time_norm || esSalidaConsentida;
 
-        /*
-          Casos válidos:
-          - entrada registrada + salida registrada
-          - entrada consentida + salida registrada
-          - entrada registrada + salida consentida
-          - entrada consentida + salida consentida
-        */
         if (!entradaValida || !salidaValida) {
           return;
         }
@@ -1111,10 +1112,21 @@
         .map((uid) => {
           const e = empleados[uid] || { nombre: "Desconocido" };
           const g = grupos[uid];
+
           const adjustment = getPayrollAdjustment(fechaInicio, fechaFin, uid);
-          const bonificacion = roundMoney(adjustment.bonificacion);
-          const ayudaEconomica = roundMoney(adjustment.ayudaEconomica);
+
+          const bonificacionBase = roundMoney(e.bonificacion || 0);
+          const ayudaEconomicaBase = roundMoney(e.ayuda_economica || 0);
+
+          const bonificacionAjuste = roundMoney(adjustment.bonificacion);
+          const ayudaEconomicaAjuste = roundMoney(adjustment.ayudaEconomica);
+
+          const bonificacion = roundMoney(bonificacionBase + bonificacionAjuste);
+          const ayudaEconomica = roundMoney(ayudaEconomicaBase + ayudaEconomicaAjuste);
+
           const ingresoGravado = roundMoney(g.bruto + bonificacion);
+          const totalBruto = roundMoney(g.bruto + bonificacion + ayudaEconomica);
+
           const isss = e.isss ? ingresoGravado * 0.03 : 0;
           const afp = e.afp ? ingresoGravado * 0.075 : 0;
           const rentaBase = Math.max(0, ingresoGravado - isss - afp);
@@ -1122,7 +1134,7 @@
             ? (rentaBase - RENTA_THRESHOLD) * RENTA_RATE
             : 0;
           const deducciones = isss + afp + renta;
-          const neto = ingresoGravado + ayudaEconomica - deducciones;
+          const neto = totalBruto - deducciones;
 
           return {
             uid,
@@ -1133,11 +1145,14 @@
             totalHoras: Number(((g.horasNorm || 0) + (g.horasExt || 0)).toFixed(2)),
             salarioBase: roundMoney(g.salarioBase || 0),
             pagoHorasExtras: roundMoney(g.pagoHorasExtras || 0),
-            recargoNocturno: roundMoney(g.recargoNocturno || 0),
+            bonificacionBase,
+            ayudaEconomicaBase,
+            bonificacionAjuste,
+            ayudaEconomicaAjuste,
             bonificacion,
             ayudaEconomica,
             ingresoGravado,
-            totalBruto: roundMoney(g.bruto + bonificacion + ayudaEconomica),
+            totalBruto,
             isss: roundMoney(isss),
             afp: roundMoney(afp),
             renta: roundMoney(renta),

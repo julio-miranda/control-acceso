@@ -63,6 +63,8 @@
         isss: row.isss || null,
         descripcion: row.descripcion || null,
         salario_h: row.salario_h ?? 0,
+        ayuda_economica: row.ayuda_economica ?? 0,
+        bonificacion: row.bonificacion ?? 0,
         role: row.role || "empleado",
         sucursal_id: row.sucursal_id || null,
         sucursal_nombre: row.sucursal_nombre || null,
@@ -242,7 +244,7 @@
     async getEmpleadoBaseById(id) {
       const { data, error } = await this.supabase
         .from("usuarios")
-        .select("id,role,sucursal_id,contacto_id,nacimiento,identificacion_nombre,afp,isss,descripcion,salario_h,created_at,updated_at")
+        .select("id,role,sucursal_id,contacto_id,nacimiento,identificacion_nombre,afp,isss,descripcion,salario_h,ayuda_economica,bonificacion,created_at,updated_at")
         .eq("id", id)
         .maybeSingle();
 
@@ -258,7 +260,7 @@
       try {
         const { data, error } = await this.supabase
           .from("v_usuarios")
-          .select("id,nombre,email,telefono,identificacion,direccion,identificacion_nombre,nacimiento,afp,isss,descripcion,salario_h,role,sucursal_id,sucursal_nombre,sucursal_codigo,empresa_id,empresa_nombre,contacto_id,created_at,updated_at,contacto_created_at,contacto_updated_at")
+          .select("id,nombre,email,telefono,identificacion,direccion,identificacion_nombre,nacimiento,afp,isss,descripcion,salario_h,ayuda_economica,bonificacion,role,sucursal_id,sucursal_nombre,sucursal_codigo,empresa_id,empresa_nombre,contacto_id,created_at,updated_at,contacto_created_at,contacto_updated_at")
           .eq("id", id)
           .maybeSingle();
 
@@ -308,6 +310,8 @@
           isss: base.isss || null,
           descripcion: base.descripcion || null,
           salario_h: base.salario_h || 0,
+          ayuda_economica: base.ayuda_economica || 0,
+          bonificacion: base.bonificacion || 0,
           role: base.role || "empleado",
           sucursal_id: base.sucursal_id || null,
           sucursal_nombre: sucursalNombre,
@@ -342,7 +346,7 @@
       try {
         let q = this.supabase
           .from("v_usuarios")
-          .select("id,nombre,email,telefono,identificacion,direccion,identificacion_nombre,nacimiento,afp,isss,descripcion,salario_h,role,sucursal_id,sucursal_nombre,sucursal_codigo,empresa_id,empresa_nombre,contacto_id,created_at,updated_at,contacto_created_at,contacto_updated_at")
+          .select("id,nombre,email,telefono,identificacion,direccion,identificacion_nombre,nacimiento,afp,isss,descripcion,salario_h,ayuda_economica,bonificacion,role,sucursal_id,sucursal_nombre,sucursal_codigo,empresa_id,empresa_nombre,contacto_id,created_at,updated_at,contacto_created_at,contacto_updated_at")
           .eq("role", "empleado")
           .order("nombre", { ascending: true });
 
@@ -361,7 +365,7 @@
 
       let fallback = this.supabase
         .from("usuarios")
-        .select("id,role,sucursal_id,contacto_id,nacimiento,identificacion_nombre,afp,isss,descripcion,salario_h,created_at,updated_at")
+        .select("id,role,sucursal_id,contacto_id,nacimiento,identificacion_nombre,afp,isss,descripcion,salario_h,ayuda_economica,bonificacion,created_at,updated_at")
         .eq("role", "empleado")
         .order("created_at", { ascending: true });
 
@@ -428,6 +432,8 @@
           isss: row.isss || null,
           descripcion: row.descripcion || null,
           salario_h: row.salario_h || 0,
+          ayuda_economica: row.ayuda_economica || 0,
+          bonificacion: row.bonificacion || 0,
           role: row.role || "empleado",
           sucursal_id: row.sucursal_id || null,
           sucursal_nombre: sucursalNombre,
@@ -455,7 +461,7 @@
 
       const { data, error } = await this.supabase
         .from("usuarios")
-        .select("id,role,sucursal_id,contacto_id,nacimiento,identificacion_nombre,afp,isss,descripcion,salario_h,created_at,updated_at")
+        .select("id,role,sucursal_id,contacto_id,nacimiento,identificacion_nombre,afp,isss,descripcion,salario_h,ayuda_economica,bonificacion,created_at,updated_at")
         .eq("id", id)
         .maybeSingle();
 
@@ -500,6 +506,8 @@
         isss: data.isss || null,
         descripcion: data.descripcion || null,
         salario_h: data.salario_h || 0,
+        ayuda_economica: data.ayuda_economica || 0,
+        bonificacion: data.bonificacion || 0,
         role: data.role || "empleado",
         sucursal_id: data.sucursal_id || null,
         sucursal_nombre: sucursalNombre,
@@ -783,7 +791,9 @@
           afp: data?.afp || null,
           isss: data?.isss || null,
           descripcion: data?.descripcion || null,
-          salario_h: data?.salario_h || 0
+          salario_h: data?.salario_h || 0,
+          ayuda_economica: data?.ayuda_economica || 0,
+          bonificacion: data?.bonificacion || 0
         },
         jornadas: Array.isArray(jornadas) ? jornadas : []
       };
@@ -825,6 +835,12 @@
         salario_h: typeof data?.salario_h !== "undefined"
           ? this.cleanNumber(data.salario_h, currentView?.salario_h ?? 0)
           : (currentView?.salario_h ?? 0),
+        ayuda_economica: typeof data?.ayuda_economica !== "undefined"
+          ? this.cleanNumber(data.ayuda_economica, currentView?.ayuda_economica ?? 0)
+          : (currentView?.ayuda_economica ?? 0),
+        bonificacion: typeof data?.bonificacion !== "undefined"
+          ? this.cleanNumber(data.bonificacion, currentView?.bonificacion ?? 0)
+          : (currentView?.bonificacion ?? 0),
         role: data?.role || currentView?.role || "empleado",
         sucursal_id: data?.sucursal_id || currentView?.sucursal_id || null,
         empresa_id: data?.empresa_id || currentView?.empresa_id || EmpleadoModel.UNICA_EMPRESA_ID
@@ -946,6 +962,8 @@
         isss: merged.isss,
         descripcion: merged.descripcion,
         salario_h: merged.salario_h,
+        ayuda_economica: merged.ayuda_economica,
+        bonificacion: merged.bonificacion,
         contacto_id: contactoId
       };
 

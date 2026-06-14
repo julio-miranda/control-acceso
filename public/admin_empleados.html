@@ -56,6 +56,11 @@
       </div>
 
       <div class="form-field">
+        <label for="empleado-telefono">Teléfono</label>
+        <input type="tel" id="empleado-telefono" name="telefono" placeholder="Ej. 7777-7777">
+      </div>
+
+      <div class="form-field">
         <label for="empleado-identificacionNombre">Tipo de Documento</label>
         <input type="text" id="empleado-identificacionNombre" name="Documento" required>
       </div>
@@ -78,6 +83,16 @@
       <div class="form-field">
         <label for="empleado-salario">Salario por Hora</label>
         <input type="number" id="empleado-salario" name="salario" step="0.01" min="0" required>
+      </div>
+
+      <div class="form-field">
+        <label for="empleado-ayuda-economica">Ayuda Económica</label>
+        <input type="number" id="empleado-ayuda-economica" name="ayuda_economica" step="0.01" min="0" value="0">
+      </div>
+
+      <div class="form-field">
+        <label for="empleado-bonificacion">Bonificación</label>
+        <input type="number" id="empleado-bonificacion" name="bonificacion" step="0.01" min="0" value="0">
       </div>
 
       <div class="form-field">
@@ -138,6 +153,8 @@
           <th>Nacimiento</th>
           <th>AFP</th>
           <th>ISSS</th>
+          <th>Ayuda Económica</th>
+          <th>Bonificación</th>
           <th>Salario/H</th>
           <th>Sucursal</th>
           <th>Rol</th>

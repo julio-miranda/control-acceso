@@ -48,12 +48,15 @@
 
         nombre: document.getElementById("empleado-nombre"),
         email: document.getElementById("empleado-email"),
+        telefono: document.getElementById("empleado-telefono"),
         identificacionNombre: document.getElementById("empleado-identificacionNombre"),
         identificacion: document.getElementById("empleado-identificacion"),
         direccion: document.getElementById("empleado-direccion"),
         isss: document.getElementById("empleado-isss"),
         afp: document.getElementById("empleado-afp"),
         salario: document.getElementById("empleado-salario"),
+        ayudaEconomica: document.getElementById("empleado-ayuda-economica"),
+        bonificacion: document.getElementById("empleado-bonificacion"),
         nacimiento: document.getElementById("empleado-nacimiento"),
         descripcion: document.getElementById("descripcion"),
         pass1: document.getElementById("register-password"),
@@ -712,17 +715,22 @@
     resetForm() {
       if (this.els.form) this.els.form.reset();
       if (this.els.nuevaPasswordContainer) this.els.nuevaPasswordContainer.style.display = "none";
+      if (this.els.ayudaEconomica) this.els.ayudaEconomica.value = "0";
+      if (this.els.bonificacion) this.els.bonificacion.value = "0";
     }
 
     fillForm(u) {
       this.setValue(this.els.nombre, u.nombre);
       this.setValue(this.els.email, u.email);
+      this.setValue(this.els.telefono, u.telefono);
       this.setValue(this.els.identificacionNombre, u.identificacion_nombre || u.identificacionNombre);
       this.setValue(this.els.identificacion, u.identificacion);
       this.setValue(this.els.direccion, u.direccion);
       this.setValue(this.els.isss, u.isss);
       this.setValue(this.els.afp, u.afp);
       this.setValue(this.els.salario, u.salario_h || u.salarioH || 0);
+      this.setValue(this.els.ayudaEconomica, u.ayuda_economica ?? u.ayudaEconomica ?? 0);
+      this.setValue(this.els.bonificacion, u.bonificacion ?? 0);
       this.setValue(this.els.nacimiento, u.nacimiento ? new Date(u.nacimiento).toISOString().slice(0, 10) : "");
       this.setValue(this.els.descripcion, u.descripcion);
     }
@@ -733,12 +741,15 @@
       return {
         nombre: getVal(this.els.nombre),
         email: getVal(this.els.email),
+        telefono: getVal(this.els.telefono),
         identificacionNombre: getVal(this.els.identificacionNombre),
         identificacion: getVal(this.els.identificacion),
         direccion: getVal(this.els.direccion),
         isss: getVal(this.els.isss),
         afp: getVal(this.els.afp),
         salarioH: parseFloat(getVal(this.els.salario)) || 0,
+        ayudaEconomica: parseFloat(getVal(this.els.ayudaEconomica)) || 0,
+        bonificacion: parseFloat(getVal(this.els.bonificacion)) || 0,
         nacimiento: getVal(this.els.nacimiento),
         descripcion: getVal(this.els.descripcion),
         password1: getVal(this.els.pass1),
@@ -786,6 +797,8 @@
         const nacimiento = this.escapeHtml(this.formatDate(u.nacimiento));
         const afp = this.escapeHtml(u.afp);
         const isss = this.escapeHtml(u.isss);
+        const ayudaEconomica = this.escapeHtml(this.formatMoney(u.ayuda_economica ?? u.ayudaEconomica ?? 0));
+        const bonificacion = this.escapeHtml(this.formatMoney(u.bonificacion ?? 0));
         const salario = this.escapeHtml(this.formatMoney(u.salario_h || u.salarioH || 0));
         const sucursal = this.escapeHtml(u.sucursal_nombre || this.getSucursalNombre(u.sucursal_id));
         const role = this.escapeHtml(u.role || "");
@@ -804,6 +817,8 @@
             <td>${nacimiento}</td>
             <td>${afp}</td>
             <td>${isss}</td>
+            <td>${ayudaEconomica}</td>
+            <td>${bonificacion}</td>
             <td>${salario}</td>
             <td>${sucursal}</td>
             <td>${role}</td>
@@ -967,10 +982,13 @@
         const commonData = {
           nombre: form.nombre,
           email: form.email,
+          telefono: form.telefono || null,
           identificacion_nombre: form.identificacionNombre || null,
           identificacion: form.identificacion,
           direccion: form.direccion || null,
           salario_h: form.salarioH,
+          ayuda_economica: form.ayudaEconomica,
+          bonificacion: form.bonificacion,
           nacimiento: form.nacimiento || null,
           descripcion: form.descripcion || null,
           isss: form.isss || null,

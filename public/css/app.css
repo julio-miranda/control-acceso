@@ -479,7 +479,7 @@ textarea {
 
 /* ---------- TABLAS ---------- */
 
-.table-container {
+.table-container, .table-responsive {
     width: 100%;
     overflow-x: auto;
     overflow-y: auto;

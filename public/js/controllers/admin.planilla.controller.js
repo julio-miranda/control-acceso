@@ -60,13 +60,13 @@
       : { bonificacion: 0, ayudaEconomica: 0, nota: "" };
 
     const bonificacion = prompt(
-      `Bonificación gravada para ${nombre}`,
+      `Bonificación temporal adicional para ${nombre}`,
       Number(current.bonificacion || 0).toFixed(2)
     );
     if (bonificacion === null) return;
 
     const ayudaEconomica = prompt(
-      `Ayuda económica no gravada para ${nombre}`,
+      `Ayuda económica temporal adicional para ${nombre}`,
       Number(current.ayudaEconomica || 0).toFixed(2)
     );
     if (ayudaEconomica === null) return;
@@ -128,14 +128,22 @@
     rows.forEach((r) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${r.nombre ?? "—"}</td>
+        <td>${escapeHtml(r.nombre ?? "—")}</td>
+        <td>${formatMoney(r.salarioHora)}</td>
         <td>${Number(r.horasNormales || 0).toFixed(2)}</td>
         <td>${Number(r.horasExtras || 0).toFixed(2)}</td>
         <td>${Number(r.totalHoras || 0).toFixed(2)}</td>
-        <td>$${Number(r.totalBruto || 0).toFixed(2)}</td>
-        <td>$${Number(r.isss || 0).toFixed(2)}</td>
-        <td>$${Number(r.afp || 0).toFixed(2)}</td>
-        <td>$${Number(r.totalNeto || 0).toFixed(2)}</td>
+        <td>${formatMoney(r.salarioBase)}</td>
+        <td>${formatMoney(r.pagoHorasExtras)}</td>
+        <td>${formatMoney(r.bonificacion)}</td>
+        <td>${formatMoney(r.ayudaEconomica)}</td>
+        <td>${formatMoney(r.totalBruto)}</td>
+        <td>${formatMoney(r.isss)}</td>
+        <td>${formatMoney(r.afp)}</td>
+        <td>${formatMoney(r.renta)}</td>
+        <td>${formatMoney(r.deducciones)}</td>
+        <td>${formatMoney(r.totalNeto)}</td>
+        <td></td>
       `;
       tbody.appendChild(tr);
     });
@@ -174,7 +182,6 @@
         <td>${formatMoney(r.renta)}</td>
         <td>${formatMoney(r.deducciones)}</td>
         <td>${formatMoney(r.totalNeto)}</td>
-        <td><button type="button" class="btn-outline planilla-ajuste-btn" data-uid="${escapeHtml(r.uid)}">Ajustar</button></td>
       `;
 
       const btn = tr.querySelector(".planilla-ajuste-btn");
