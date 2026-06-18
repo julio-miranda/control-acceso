@@ -27,11 +27,11 @@
 <body>
   <div class="section">
     <h2>Registro</h2>
+
     <form id="register-form" action="#" method="post">
       <input id="register-nombre" name="nombre" type="text" placeholder="Nombre" required>
       <input id="register-numero" name="numero_identidad" type="text" placeholder="Número de Identidad" required>
-      <input id="register-identificacionNombre" name="tipo_documento" type="text" placeholder="Tipo de Documento"
-        required>
+      <input id="register-identificacionNombre" name="tipo_documento" type="text" placeholder="Tipo de Documento" required>
 
       <label for="register-Fecha">Fecha de Nacimiento</label>
       <input id="register-Fecha" name="fecha_nacimiento" type="date" required>
@@ -39,35 +39,21 @@
       <input id="register-isss" name="isss" type="text" placeholder="Número ISSS">
       <input id="register-afp" name="afp" type="text" placeholder="Número AFP">
 
-      <!-- Sección de Empresa -->
+      <!-- Empresa fija -->
       <div id="empresa-select-container">
         <label for="register-empresa-select">Empresa</label>
-        <select id="register-empresa-select" name="empresa" required>
-          <option value="" selected>Selecciona una empresa</option>
-          <!-- Opciones generadas dinámicamente -->
-          <option value="otro">Otro</option>
+        <select id="register-empresa-select" name="empresa" required disabled>
+          <option value="UNICA EMPRESA" selected>Vértigo</option>
         </select>
       </div>
 
-      <!-- Contenedor para ingreso manual del nombre de la empresa -->
-      <div id="manual-empresa-container" style="display: none;">
-        <input id="register-empresa-manual" name="empresa_manual" type="text" placeholder="Nombre de la Empresa">
-      </div>
-
-      <!-- Sección de Sucursal -->
+      <!-- Sucursal válida desde base -->
       <div id="sucursal-select-container">
         <label for="register-sucursal-select">Sucursal</label>
-        <select id="register-sucursal-select" name="sucursal" required>
-          <option value="" selected>Selecciona una sucursal</option>
-          <!-- Opciones generadas dinámicamente -->
-          <option value="otro">Otro</option>
+        <select id="register-sucursal-select" name="sucursal" required disabled>
+          <option value="" selected>Cargando sucursales...</option>
         </select>
-      </div>
-
-      <!-- Contenedor para ingreso manual del número de sucursal -->
-      <div id="manual-sucursal-container" style="display: none;">
-        <input id="register-sucursal-manual" name="sucursal_manual" type="text"
-          placeholder="Número o nombre de Sucursal">
+        <small id="sucursal-status" style="display:block; margin-top:6px;"></small>
       </div>
 
       <input id="register-direccion" name="direccion" type="text" placeholder="Dirección Personal" required>

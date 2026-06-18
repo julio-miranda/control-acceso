@@ -5,7 +5,7 @@
   const supabase = window.supabase;
   const RegisterModel = window.RegisterModel;
 
-  const UNICA_EMPRESA_ID = "UNICA_EMPRESA";
+  const UNICA_EMPRESA_ID = "UNICA EMPRESA";
   const UNICA_EMPRESA_NOMBRE = "Vértigo";
 
   if (!supabase) {
@@ -20,13 +20,15 @@
 
   const empresaSelect = document.getElementById("register-empresa-select");
   const sucursalSelect = document.getElementById("register-sucursal-select");
-  const contSucursal = document.getElementById("sucursal-select-container");
-  const contManualSuc = document.getElementById("manual-sucursal-container");
-  const inputManualSuc = document.getElementById("register-sucursal-manual");
-  const contManualEmpresa = document.getElementById("manual-empresa-container");
-  const inputManualEmpresa = document.getElementById("register-empresa-manual");
+  const sucursalStatus = document.getElementById("sucursal-status");
   const registerForm = document.getElementById("register-form");
   const submitButton = registerForm ? registerForm.querySelector('button[type="submit"]') : null;
+
+  function setSucursalStatus(message, isError = false) {
+    if (!sucursalStatus) return;
+    sucursalStatus.textContent = message || "";
+    sucursalStatus.style.color = isError ? "#b00020" : "#444";
+  }
 
   function resetSucursalSelect() {
     if (!sucursalSelect) return;
@@ -38,11 +40,6 @@
     optDefault.selected = true;
     optDefault.textContent = "Selecciona una sucursal";
     sucursalSelect.appendChild(optDefault);
-
-    const optOtro = document.createElement("option");
-    optOtro.value = "otro";
-    optOtro.textContent = "Otro";
-    sucursalSelect.appendChild(optOtro);
   }
 
   function renderEmpresas(empresas) {
@@ -50,38 +47,29 @@
 
     empresaSelect.innerHTML = "";
 
-    const optDefault = document.createElement("option");
-    optDefault.value = "";
-    optDefault.selected = true;
-    optDefault.textContent = "Selecciona una empresa";
-    empresaSelect.appendChild(optDefault);
-
     const list = Array.isArray(empresas) && empresas.length > 0
       ? empresas
       : [{ id: UNICA_EMPRESA_ID, nombre: UNICA_EMPRESA_NOMBRE }];
 
     list.forEach((row) => {
       const opt = document.createElement("option");
-      opt.value = row.id;
+      opt.value = String(row.id);
       opt.textContent = row.nombre || UNICA_EMPRESA_NOMBRE;
       empresaSelect.appendChild(opt);
     });
 
     empresaSelect.value = UNICA_EMPRESA_ID;
     empresaSelect.disabled = true;
-
-    if (contManualEmpresa) contManualEmpresa.style.display = "none";
-    if (inputManualEmpresa) inputManualEmpresa.required = false;
   }
 
   function renderSucursales(sucursales) {
-    resetSucursalSelect();
-
     if (!sucursalSelect) return;
 
-    const otroOpt = sucursalSelect.querySelector('option[value="otro"]');
+    resetSucursalSelect();
 
-    (Array.isArray(sucursales) ? sucursales : []).forEach((row) => {
+    const list = Array.isArray(sucursales) ? sucursales : [];
+
+    list.forEach((row) => {
       const opt = document.createElement("option");
       opt.value = String(row.id);
 
@@ -90,34 +78,17 @@
       if (row.nombre) labelParts.push(String(row.nombre));
 
       opt.textContent = labelParts.length ? labelParts.join(" - ") : String(row.id);
-
-      if (otroOpt) {
-        sucursalSelect.insertBefore(opt, otroOpt);
-      } else {
-        sucursalSelect.appendChild(opt);
-      }
+      sucursalSelect.appendChild(opt);
     });
 
-    if (contSucursal) contSucursal.style.display = "block";
-    if (sucursalSelect) {
-      sucursalSelect.disabled = false;
-      sucursalSelect.required = true;
+    sucursalSelect.disabled = list.length === 0;
+    sucursalSelect.required = true;
+
+    if (list.length > 0) {
+      setSucursalStatus("Selecciona una sucursal válida.");
+    } else {
+      setSucursalStatus("No se encontraron sucursales disponibles.", true);
     }
-
-    if (contManualSuc) contManualSuc.style.display = "none";
-    if (inputManualSuc) inputManualSuc.required = false;
-  }
-
-  function mostrarManualSucursal(mostrar) {
-    if (contManualSuc) contManualSuc.style.display = mostrar ? "block" : "none";
-    if (inputManualSuc) inputManualSuc.required = mostrar;
-  }
-
-  function habilitarSucursalSelect(habilitar) {
-    if (!sucursalSelect) return;
-    sucursalSelect.disabled = !habilitar;
-    sucursalSelect.required = habilitar;
-    if (!habilitar) resetSucursalSelect();
   }
 
   async function cargarEmpresas() {
@@ -132,39 +103,29 @@
 
   async function cargarSucursalesEmpresaUnica() {
     try {
-      const sucursales = await RegisterModel.cargarSucursalesPorEmpresa(UNICA_EMPRESA_ID);
-
-      if (!sucursales.length) {
-        if (contSucursal) contSucursal.style.display = "none";
-        habilitarSucursalSelect(false);
-        mostrarManualSucursal(true);
-      } else {
-        renderSucursales(sucursales);
+      setSucursalStatus("Cargando sucursales...");
+      if (sucursalSelect) {
+        sucursalSelect.disabled = true;
+        resetSucursalSelect();
       }
+
+      const sucursales = await RegisterModel.cargarSucursalesPorEmpresa(UNICA_EMPRESA_ID);
+      renderSucursales(sucursales);
     } catch (err) {
       console.error("Error cargando sucursales:", err);
-      if (contSucursal) contSucursal.style.display = "none";
-      habilitarSucursalSelect(false);
-      mostrarManualSucursal(true);
+      renderSucursales([]);
+      setSucursalStatus("No se pudieron cargar las sucursales. Revisa permisos sobre public.sucursales.", true);
     }
-  }
-
-  if (empresaSelect) {
-    empresaSelect.addEventListener("change", async function () {
-      this.value = UNICA_EMPRESA_ID;
-      await cargarSucursalesEmpresaUnica();
-    });
-  }
-
-  if (sucursalSelect) {
-    sucursalSelect.addEventListener("change", function () {
-      mostrarManualSucursal(this.value === "otro");
-    });
   }
 
   if (!registerForm) {
     console.error("Formulario de registro 'register-form' no encontrado.");
     return;
+  }
+
+  if (empresaSelect) {
+    empresaSelect.value = UNICA_EMPRESA_ID;
+    empresaSelect.disabled = true;
   }
 
   cargarEmpresas().then(() => cargarSucursalesEmpresaUnica());
@@ -197,26 +158,15 @@
         return;
       }
 
-      let sucursalId = null;
-
       if (!sucursalSelect) {
         alert("Error en el formulario: elemento sucursal no encontrado.");
         return;
       }
 
-      if (sucursalSelect.value === "otro") {
-        const manualSuc = (inputManualSuc?.value || "").trim();
-        if (!manualSuc) {
-          alert("Ingresa el número/nombre de sucursal (campo requerido).");
-          return;
-        }
-        sucursalId = await RegisterModel.crearSucursal(UNICA_EMPRESA_ID, manualSuc);
-      } else {
-        sucursalId = (sucursalSelect.value || "").trim();
-        if (!sucursalId) {
-          alert("Selecciona una sucursal válida.");
-          return;
-        }
+      const sucursalId = (sucursalSelect.value || "").trim();
+      if (!sucursalId) {
+        alert("Selecciona una sucursal válida.");
+        return;
       }
 
       const role = "empleado";
@@ -231,7 +181,8 @@
             identificacion_nombre: identificacionNombre || null,
             nacimiento: fecha || null,
             role,
-            sucursal_id: sucursalId
+            sucursal_id: sucursalId,
+            empresa_id: UNICA_EMPRESA_ID
           }
         }
       });
@@ -248,26 +199,22 @@
         return;
       }
 
-      if (typeof RegisterModel.registrarUsuario === "function") {
-        const payload = {
-          id: authUser.id,
-          nombre,
-          identificacion: numero || null,
-          identificacion_nombre: identificacionNombre || null,
-          nacimiento: fecha || null,
-          email,
-          descripcion: "Sin descripción",
-          salario_h: 1.25,
-          role,
-          sucursal_id: sucursalId,
-          direccion: direccion || null,
-          telefono: telefono || null,
-          isss: isss || null,
-          afp: afp || null
-        };
-
-        await RegisterModel.registrarUsuario(payload);
-      }
+      await RegisterModel.registrarUsuario({
+        id: authUser.id,
+        nombre,
+        identificacion: numero || null,
+        identificacion_nombre: identificacionNombre || null,
+        nacimiento: fecha || null,
+        email,
+        direccion: direccion || null,
+        telefono: telefono || null,
+        isss: isss || null,
+        afp: afp || null,
+        descripcion: "Sin descripción",
+        salario_h: 1.25,
+        role,
+        sucursal_id: sucursalId
+      });
 
       alert("Registro exitoso. Ya puedes iniciar sesión.");
       window.location.href = "index.html";
