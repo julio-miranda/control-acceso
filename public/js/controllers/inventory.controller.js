@@ -127,7 +127,8 @@
 
     return [
       "admin",
-      "gerente"
+      "gerente",
+      "bodega"
     ].includes(r);
   }
 
