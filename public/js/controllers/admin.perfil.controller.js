@@ -1,3 +1,4 @@
+// js/controllers/admin.perfil.controller.js
 (function () {
     const Auth = {
         checkUserSession: window.checkUserSession,
@@ -7,6 +8,7 @@
     };
 
     const PerfilModel = window.PerfilModel;
+    const RolePolicy = window.RolePolicy || null;
 
     if (!Auth.checkUserSession || !Auth.logout || !Auth.updatePassword) {
         console.error("auth.js no cargó correctamente sus funciones globales.");
@@ -29,6 +31,52 @@
             .replace(/[^\w\s-]/g, "")
             .trim()
             .replace(/\s+/g, "_");
+    }
+
+    function normalizeRole(role) {
+        if (RolePolicy?.normalizeRole) return RolePolicy.normalizeRole(role);
+        return String(role || "").trim().toLowerCase();
+    }
+
+    function canAccessProfile(role) {
+        const normalized = normalizeRole(role);
+        return !!normalized;
+    }
+
+    function applyNavbarByRole(role) {
+        const normalized = normalizeRole(role);
+        const items = document.querySelectorAll("#menu > li[data-roles]");
+        const homeLink = document.querySelector('#menu a[data-nav="home"]');
+        const logoLink = document.getElementById("navbar-home-link");
+
+        items.forEach((item) => {
+            const allowedRoles = String(item.dataset.roles || "")
+                .split(",")
+                .map((r) => normalizeRole(r))
+                .filter(Boolean);
+
+            item.style.display = allowedRoles.includes(normalized) ? "" : "none";
+        });
+
+        const homeHref = RolePolicy?.getRedirectByRole
+            ? RolePolicy.getRedirectByRole(normalized)
+            : "index.html";
+
+        if (homeLink) homeLink.href = homeHref;
+        if (logoLink) logoLink.href = homeHref;
+
+        document.querySelectorAll("#menu a").forEach((link) => {
+            const href = link.getAttribute("href") || "";
+            const isCurrent =
+                href.includes("admin_perfil.html") ||
+                (document.body?.dataset?.page || "") === "perfil";
+
+            if (isCurrent && href.includes("admin_perfil.html")) {
+                link.classList.add("active");
+            } else {
+                link.classList.remove("active");
+            }
+        });
     }
 
     function ocultarSecciones() {
@@ -156,19 +204,20 @@
 
                 const { data: userData } = await PerfilModel.getPerfil(uid);
 
-                const role = String(
+                const role = normalizeRole(
                     userData?.role ||
                     session?.app_metadata?.role ||
                     session?.user_metadata?.role ||
                     ""
-                ).toLowerCase();
+                );
 
-                if (role !== "admin") {
-                    alert("No tienes permisos de administrador.");
+                if (!canAccessProfile(role)) {
+                    alert("No tienes acceso al perfil.");
                     Auth.logout();
                     return;
                 }
 
+                applyNavbarByRole(role);
                 await cargarPerfil(uid);
 
                 const form = document.getElementById("perfil-form");
@@ -182,7 +231,10 @@
                 const cancelar = document.getElementById("btnCancelarPerfil");
                 if (cancelar) {
                     cancelar.addEventListener("click", () => {
-                        window.location.href = "admin_empleados.html";
+                        const target = RolePolicy?.getRedirectByRole
+                            ? RolePolicy.getRedirectByRole(role)
+                            : "index.html";
+                        window.location.href = target;
                     });
                 }
 

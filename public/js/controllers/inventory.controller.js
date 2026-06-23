@@ -4,6 +4,7 @@
 
   const model = global.inventoryModel || global.salesModel;
   const supabase = global.supabase;
+  const rolePolicy = global.RolePolicy || null;
 
   if (!model) {
     console.error("inventoryModel no está disponible.");
@@ -90,10 +91,12 @@
   }
 
   function normalizeRole(role) {
+    if (rolePolicy?.normalizeRole) return rolePolicy.normalizeRole(role);
     return String(role || "").trim().toLowerCase();
   }
 
   function isAdminRole(role) {
+    if (rolePolicy?.isAdmin) return rolePolicy.isAdmin(role);
     const r = normalizeRole(role);
     return [
       "admin",
@@ -103,6 +106,18 @@
       "super administrador",
       "super-administrador"
     ].includes(r);
+  }
+
+  function canAccessInventory(role) {
+    if (rolePolicy?.can) return rolePolicy.can(role, "inventory") || rolePolicy.can(role, "inventario");
+    const r = normalizeRole(role);
+    return ["admin", "gerente", "bodega"].includes(r);
+  }
+
+  function canManageRecipes(role) {
+    if (rolePolicy?.can) return rolePolicy.can(role, "inventory") || rolePolicy.can(role, "inventario");
+    const r = normalizeRole(role);
+    return ["admin", "gerente", "bodega"].includes(r);
   }
 
   function getWeekRange() {
@@ -148,7 +163,7 @@
     try {
       const { data, error } = await supabase
         .from("v_usuarios")
-        .select("id,nombre,email,telefono,direccion,role,sucursal_id,empresa_id")
+        .select("id,nombre,email,telefono,direccion,role,sucursal_id,empresa_id,empresa_nombre")
         .eq("id", uid)
         .maybeSingle();
 
@@ -163,6 +178,7 @@
         role: normalizeRole(data.role || ""),
         sucursal_id: data.sucursal_id || null,
         empresa_id: data.empresa_id || null,
+        empresa_nombre: data.empresa_nombre || "",
         raw: data
       };
     } catch (e) {
@@ -344,7 +360,7 @@
     });
   }
 
-  function buildProductRow(p, forecastMap) {
+  async function buildProductRow(p, forecastMap) {
     const tr = document.createElement("tr");
 
     const tdName = document.createElement("td");
@@ -364,7 +380,19 @@
     tr.appendChild(tdPrice);
 
     const tdSuggested = document.createElement("td");
-    const forecast = model.getSuggestionForProduct(p.id, p.stock, forecastMap);
+    let forecast = null;
+
+    try {
+      forecast = await model.getSuggestionForProduct(p.id, p.stock, forecastMap);
+    } catch (e) {
+      forecast = {
+        soldThisMonth: 0,
+        avgDaily: 0,
+        projectedNextMonth: 0,
+        suggested: 0
+      };
+    }
+
     const tooltip = buildForecastTooltip(forecast);
 
     if (forecast.suggested > 0) {
@@ -417,7 +445,7 @@
     return tr;
   }
 
-  function renderProductsTable(products, forecastMap) {
+  async function renderProductsTable(products, forecastMap) {
     if (!el.tbody) return;
 
     el.tbody.innerHTML = "";
@@ -427,9 +455,8 @@
       return;
     }
 
-    products.forEach((p) => {
-      el.tbody.appendChild(buildProductRow(p, forecastMap));
-    });
+    const rows = await Promise.all((products || []).map((p) => buildProductRow(p, forecastMap)));
+    rows.forEach((tr) => el.tbody.appendChild(tr));
 
     filterTable(el.searchInput ? el.searchInput.value.trim().toLowerCase() : "");
   }
@@ -440,7 +467,7 @@
       const products = Array.isArray(result) ? result : (result?.products || []);
       state.productsList = products || [];
       state.forecastMap = Array.isArray(result) ? {} : (result?.forecastMap || {});
-      renderProductsTable(state.productsList, state.forecastMap);
+      await renderProductsTable(state.productsList, state.forecastMap);
       renderLowStock(state.productsList);
       renderStats(state.productsList);
     } catch (e) {
@@ -547,6 +574,11 @@
   async function openRecipeEditor({ product = null, recipe = null } = {}) {
     if (typeof Swal === "undefined") {
       notifyError("SweetAlert2 no está disponible.");
+      return;
+    }
+
+    if (!canManageRecipes(state.currentRole)) {
+      notifyError("No tienes permisos para administrar recetas.");
       return;
     }
 
@@ -714,16 +746,21 @@
   async function confirmDeleteRecipe(recipe) {
     if (!recipe || !recipe.id) return;
 
+    if (!canManageRecipes(state.currentRole)) {
+      notifyError("No tienes permisos para eliminar recetas.");
+      return;
+    }
+
     const res = typeof Swal === "undefined"
       ? { isConfirmed: confirm(`¿Eliminar la receta "${recipe.nombre}"? Esta acción no se puede deshacer.`) }
       : await Swal.fire({
-          title: `Eliminar receta "${escapeHtml(recipe.nombre || "")}"?`,
-          text: "Esta acción no se puede deshacer.",
-          icon: "warning",
-          showCancelButton: true,
-          confirmButtonText: "Sí, eliminar",
-          cancelButtonText: "Cancelar"
-        });
+        title: `Eliminar receta "${escapeHtml(recipe.nombre || "")}"?`,
+        text: "Esta acción no se puede deshacer.",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Sí, eliminar",
+        cancelButtonText: "Cancelar"
+      });
 
     if (!res.isConfirmed) return;
 
@@ -741,6 +778,11 @@
   async function openAddProductModal() {
     if (typeof Swal === "undefined") {
       notifyError("SweetAlert2 no está disponible.");
+      return;
+    }
+
+    if (!canAccessInventory(state.currentRole)) {
+      notifyError("No tienes permisos para gestionar inventario.");
       return;
     }
 
@@ -963,6 +1005,11 @@
       return;
     }
 
+    if (!canAccessInventory(state.currentRole)) {
+      notifyError("No tienes permisos para editar inventario.");
+      return;
+    }
+
     const originalStock = Number(product.stock || 0);
 
     const result = await Swal.fire({
@@ -1031,6 +1078,11 @@
 
   async function confirmDeleteProduct(product) {
     if (!product || !product.id) return;
+
+    if (!isAdminRole(state.currentRole)) {
+      notifyError("Solo administrador puede desactivar productos.");
+      return;
+    }
 
     if (typeof Swal === "undefined") {
       if (!confirm(`Desactivar ${product.nombre || product.name}? Esta acción no se puede deshacer.`)) return;
@@ -1259,6 +1311,11 @@
     if (el.btnRecetas) {
       styleBtn(el.btnRecetas, "outline");
       el.btnRecetas.addEventListener("click", async () => {
+        if (!canManageRecipes(state.currentRole)) {
+          notifyError("No tienes permisos para administrar recetas.");
+          return;
+        }
+
         state.recipesVisible = !state.recipesVisible;
 
         if (el.recetasPanel) {
@@ -1318,6 +1375,35 @@
     return role;
   }
 
+  function applyNavbarByRole(role) {
+    const normalized = normalizeRole(role);
+    const items = document.querySelectorAll("#menu > li[data-roles]");
+
+    items.forEach((item) => {
+      const roles = String(item.dataset.roles || "")
+        .split(",")
+        .map((r) => normalizeRole(r))
+        .filter(Boolean);
+
+      const visible = roles.includes(normalized);
+      item.style.display = visible ? "" : "none";
+    });
+
+    const currentPage = document.body?.dataset?.page || "";
+    document.querySelectorAll("#menu a").forEach((link) => {
+      const href = link.getAttribute("href") || "";
+      const isCurrent =
+        (currentPage === "inventory" && href.includes("inventory.html")) ||
+        href === window.location.pathname.split("/").pop();
+
+      if (isCurrent) {
+        link.classList.add("active");
+      } else {
+        link.classList.remove("active");
+      }
+    });
+  }
+
   async function bootstrap() {
     try {
       const uid = await getSessionUid();
@@ -1338,20 +1424,21 @@
 
       const role = await resolveRole(uid, mergedUser);
 
-      if (!isAdminRole(role)) {
-        console.log("[inventory.controller] Usuario sin permisos de administrador", {
+      if (!canAccessInventory(role)) {
+        console.log("[inventory.controller] Usuario sin permisos de inventario", {
           uid,
           role,
           mergedUser
         });
-        alert("No tienes permisos de administrador.");
-        await performLogout("not-admin");
+        alert("No tienes permisos para acceder a inventario.");
+        await performLogout("not-authorized");
         return;
       }
 
-      mergedUser.role = role || "admin";
+      mergedUser.role = role || "bodega";
       applyModelContext(mergedUser, uid);
-
+      applyNavbarByRole(role);
+      
       if (el.btnLogout) {
         el.btnLogout.addEventListener("click", async (e) => {
           e.preventDefault();

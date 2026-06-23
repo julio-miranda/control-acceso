@@ -1,9 +1,12 @@
 // js/controllers/reservas.controller.js
-document.addEventListener("DOMContentLoaded", () => {
-  const Model = window.ReservasModel;
-  const Auth = window.AuthModel;
-  const Swal = window.Swal;
-  const QRCode = window.QRCode;
+(function (global) {
+  "use strict";
+
+  const Model = global.ReservasModel;
+  const Auth = global.AuthModel || null;
+  const Swal = global.Swal || null;
+  const QRCode = global.QRCode || null;
+  const rolePolicy = global.RolePolicy || null;
 
   if (!Model) {
     console.error("ReservasModel no está disponible.");
@@ -56,6 +59,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let cachedTables = [];
   let cachedReservations = [];
   let cachedVip = [];
+  let currentRole = "";
 
   function escapeHtml(s) {
     return String(s || "").replace(/[&<>"'`=\/]/g, c => ({
@@ -90,6 +94,43 @@ document.addEventListener("DOMContentLoaded", () => {
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return null;
     return d.toISOString();
+  }
+
+  function normalizeRole(role) {
+    if (rolePolicy?.normalizeRole) return rolePolicy.normalizeRole(role);
+    return String(role || "").trim().toLowerCase();
+  }
+
+  function canAccessModule(role) {
+    const normalized = normalizeRole(role);
+
+    if (rolePolicy?.can) {
+      const allowedByPolicy =
+        rolePolicy.can(normalized, "reservas") ||
+        rolePolicy.can(normalized, "reservations");
+      if (allowedByPolicy) return true;
+    }
+
+    return ["admin", "gerente","barra"].includes(normalized);
+  }
+
+  function canAccessMenuItem(role, allowedRolesCsv) {
+    const normalized = normalizeRole(role);
+    const allowed = String(allowedRolesCsv || "")
+      .split(",")
+      .map(v => v.trim().toLowerCase())
+      .filter(Boolean);
+
+    if (!allowed.length) return true;
+    return allowed.includes(normalized);
+  }
+
+  function applyMenuRoles(role) {
+    const items = document.querySelectorAll("#menu [data-roles]");
+    items.forEach((item) => {
+      const allowedRoles = item.getAttribute("data-roles");
+      item.style.display = canAccessMenuItem(role, allowedRoles) ? "" : "none";
+    });
   }
 
   function setupMenu() {
@@ -1043,7 +1084,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function handleDeleteReservation(reservationId) {
-    const confirm = await Swal.fire({
+    const confirmResult = await Swal.fire({
       title: "Eliminar reserva",
       text: "Esta acción no se puede deshacer.",
       icon: "warning",
@@ -1052,7 +1093,7 @@ document.addEventListener("DOMContentLoaded", () => {
       cancelButtonText: "Cancelar"
     });
 
-    if (!confirm.isConfirmed) return;
+    if (!confirmResult.isConfirmed) return;
 
     try {
       const result = await Model.deleteReservation(reservationId);
@@ -1193,7 +1234,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function bindMesaForm() {
     const mesaForm = document.getElementById("mesaForm");
-    const btnCreateTable = document.getElementById("btnCreateTable");
+    const btnCreateTable = document.getElementById("btnCreateMesa");
     const btnClearMesa = document.getElementById("btnClearMesa");
 
     if (!mesaForm) return;
@@ -1268,7 +1309,7 @@ document.addEventListener("DOMContentLoaded", () => {
           </div>
 
           <div style="display:flex; gap:10px; flex-wrap:wrap;">
-            <button id="btnCreateTable" class="btn-primary" type="button">Guardar mesa</button>
+            <button id="btnCreateMesa" class="btn-primary" type="button">Guardar mesa</button>
             <button id="btnClearMesa" class="btn-outline" type="button">Limpiar</button>
           </div>
         </form>
@@ -1295,6 +1336,17 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  async function bootstrapUser() {
+    const currentUser = await Model.bootstrapAuth();
+    if (!currentUser) return null;
+
+    Model.setCurrentUser(currentUser);
+    currentRole = normalizeRole(currentUser?.role || "");
+
+    applyMenuRoles(currentRole);
+    return currentUser;
+  }
+
   async function boot() {
     try {
       setupMenu();
@@ -1312,18 +1364,15 @@ document.addEventListener("DOMContentLoaded", () => {
         });
       }
 
-      const currentUser = await Model.bootstrapAuth();
+      const currentUser = await bootstrapUser();
 
       if (!currentUser) {
         window.location.replace("index.html");
         return;
       }
 
-      Model.setCurrentUser(currentUser);
-
-      const role = String(currentUser?.role || "").toLowerCase();
-      if (role && role !== "admin") {
-        await safeLogout("not-admin");
+      if (!canAccessModule(currentRole)) {
+        await safeLogout("not-authorized");
         return;
       }
 
@@ -1335,11 +1384,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  boot();
+  document.addEventListener("DOMContentLoaded", boot);
 
-  window.ReservasController = {
+  global.ReservasController = {
     boot,
     refreshDashboardData,
     renderEventTypes
   };
-});
+})(window);

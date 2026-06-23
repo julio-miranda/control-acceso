@@ -1,9 +1,10 @@
-// js/controllers/sales.controller.js 
+// js/controllers/sales.controller.js
 (function (global) {
   "use strict";
 
   const model = global.salesModel;
   const Swal = global.Swal;
+  const rolePolicy = global.RolePolicy || null;
 
   if (!model) {
     console.error("salesModel no está disponible.");
@@ -38,9 +39,43 @@
   };
 
   const SALES_TABLE_COLUMNS = 6;
+  const ALLOWED_ROLES = ["admin", "gerente", "barra", "cajero", "developer"];
 
   let salesDataTable = null;
   let companyName = "";
+
+  function normalizeRole(role) {
+    if (rolePolicy?.normalizeRole) return rolePolicy.normalizeRole(role);
+    return String(role || "").trim().toLowerCase();
+  }
+
+  function canAccessSales(role) {
+    const normalized = normalizeRole(role);
+
+    if (rolePolicy?.can) {
+      return Boolean(
+        rolePolicy.can(normalized, "sales") ||
+        rolePolicy.can(normalized, "ventas")
+      );
+    }
+
+    return ALLOWED_ROLES.includes(normalized);
+  }
+
+  function applyNavRoles(role) {
+    const normalized = normalizeRole(role);
+
+    if (!navLinks) return;
+
+    qsa("[data-roles]", navLinks).forEach((item) => {
+      const roles = String(item.dataset.roles || "")
+        .split(",")
+        .map((r) => normalizeRole(r))
+        .filter(Boolean);
+
+      item.style.display = roles.length === 0 || roles.includes(normalized) ? "" : "none";
+    });
+  }
 
   function normalizeQRText(text) {
     return String(text || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -265,7 +300,7 @@
 
         const nombre = isReserva
           ? (v.nombre_reserva || v.observacion || "Reserva")
-          : (v.usuario_nombre ? model.saleLabel(v) : model.saleDetailText(v));
+          : model.saleDetailText(v);
 
         const userName = isReserva
           ? (v.usuario_reserva_nombre || "-")
@@ -509,7 +544,7 @@
       <button type="button" class="btn-outline combo-remove-btn">X</button>
     `;
 
-    wrapper.querySelector(".btn-outline").addEventListener("click", () => wrapper.remove());
+    wrapper.querySelector(".combo-remove-btn").addEventListener("click", () => wrapper.remove());
     return wrapper;
   }
 
@@ -878,7 +913,6 @@
     try {
       bindUI();
       setupMenu();
-      await setupQr();
 
       const currentUser = await model.bootstrapAuth();
       if (!currentUser) {
@@ -891,8 +925,36 @@
         return;
       }
 
+      const role = normalizeRole(currentUser.role);
+
+      if (!canAccessSales(role)) {
+        alert("No tienes permisos para acceder al módulo de ventas.");
+        if (global.AuthModel && typeof global.AuthModel.signOut === "function") {
+          await global.AuthModel.signOut({ redirect: true });
+        } else {
+          window.location.replace("index.html");
+        }
+        return;
+      }
+
       model.setCurrentUser(currentUser);
       await loadCompanyName();
+      applyNavRoles(role);
+
+      if (rolePolicy?.ROLE_LABELS) {
+        global.currentUserRole = role;
+      }
+
+      if (model.setContext && currentUser) {
+        model.setContext({
+          userId: currentUser.id || null,
+          userName: currentUser.nombre || "",
+          role,
+          empresaId: currentUser.empresa_id || null,
+          sucursalId: currentUser.sucursal_id || null,
+          empresaNombre: companyName || global.adminEmpresaNombre || ""
+        });
+      }
 
       await model.loadProducts();
       renderProductSelect();
@@ -911,6 +973,11 @@
       );
 
       renderCart();
+      await setupQr();
+
+      if (menuToggle && navLinks) {
+        menuToggle.setAttribute("aria-expanded", "false");
+      }
 
       window.addEventListener("beforeunload", () => {
         model.cleanupRealtime();

@@ -169,7 +169,7 @@
         return;
       }
 
-      const role = "empleado";
+      const role = window.RolePolicy?.ROLES?.PENDIENTE || "pendiente";
 
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email,

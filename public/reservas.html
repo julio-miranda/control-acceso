@@ -22,16 +22,16 @@
 
     <div id="navbar-links" class="navbar-right">
       <ul id="menu">
-        <li><a href="admin_perfil.html">Perfil</a></li>
-        <li><a href="admin_empleados.html">Empleados</a></li>
-        <li><a href="clientes_vip.html">VIP</a></li>
-        <li><a href="admin_asistencias.html">Asistencias</a></li>
-        <li><a href="admin_jornadas.html">Jornadas</a></li>
-        <li><a href="inventory.html">Inventario</a></li>
-        <li><a href="sales.html">Ventas</a></li>
-        <li><a href="admin_metricas_satisfaccion.html">Encuesta</a></li>
-        <li><a href="admin_planilla.html">Planilla</a></li>
-        <li>
+        <li data-roles="admin,gerente,barra,bodega"><a href="admin_perfil.html">Perfil</a></li>
+        <li data-roles="admin,gerente"><a href="admin_empleados.html">Empleados</a></li>
+        <li data-roles="admin,gerente"><a href="clientes_vip.html">VIP</a></li>
+        <li data-roles="admin,gerente"><a href="admin_asistencias.html">Asistencias</a></li>
+        <li data-roles="admin,gerente"><a href="admin_jornadas.html">Jornadas</a></li>
+        <li data-roles="admin,gerente,bodega"><a href="inventory.html">Inventario</a></li>
+        <li data-roles="admin,gerente,barra"><a href="sales.html">Ventas</a></li>
+        <li data-roles="admin,gerente"><a href="admin_metricas_satisfaccion.html">Encuesta</a></li>
+        <li data-roles="admin,gerente"><a href="admin_planilla.html">Planilla</a></li>
+        <li data-roles="admin,gerente">
           <button id="btnDescargarQr" type="button">Generar QR Empresa</button>
           <div id="qr-container" style="margin-top:10px;"></div>
         </li>
@@ -276,6 +276,9 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase-config.js?v=20260527-sales-prepared"></script>
 
+  <script src="js/roles.js?v=20260527-sales-prepared"></script>
+  <script src="js/auth.js?v=20260527-sales-prepared"></script>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
@@ -283,7 +286,6 @@
   <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
-  <script src="js/auth.js?v=20260527-sales-prepared"></script>
   <script src="js/models/reservas.model.js?v=20260527-sales-prepared"></script>
   <script src="js/controllers/reservas.controller.js?v=20260527-sales-prepared"></script>
 </body>

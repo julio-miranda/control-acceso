@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -23,16 +22,16 @@
 
     <div id="navbar-links" class="navbar-right">
       <ul id="menu">
-        <li><a href="admin_perfil.html">Perfil</a></li>
-        <li><a href="admin_empleados.html">Empleados</a></li>
-        <li><a href="clientes_vip.html">VIP</a></li>
-        <li><a href="admin_asistencias.html">Asistencias</a></li>
-        <li><a href="admin_jornadas.html">Jornadas</a></li>
-        <li><a href="admin_planilla.html">Planilla</a></li>
-        <li><a href="inventory.html">Inventario</a></li>
-        <li><a href="reservas.html">Reservas</a></li>
-        <li><a href="admin_metricas_satisfaccion.html">Encuesta</a></li>
-        <li>
+        <li data-roles="admin,gerente,barra"><a href="admin_perfil.html">Perfil</a></li>
+        <li data-roles="admin,gerente"><a href="admin_empleados.html">Empleados</a></li>
+        <li data-roles="admin,gerente"><a href="clientes_vip.html">VIP</a></li>
+        <li data-roles="admin,gerente,bodega"><a href="admin_asistencias.html">Asistencias</a></li>
+        <li data-roles="admin,gerente"><a href="admin_jornadas.html">Jornadas</a></li>
+        <li data-roles="admin,gerente"><a href="admin_planilla.html">Planilla</a></li>
+        <li data-roles="admin,gerente,bodega"><a href="inventory.html">Inventario</a></li>
+        <li data-roles="admin,gerente,barra"><a href="reservas.html">Reservas</a></li>
+        <li data-roles="admin,gerente"><a href="admin_metricas_satisfaccion.html">Encuesta</a></li>
+        <li data-roles="admin,gerente">
           <button id="btnDescargarQr" type="button">Generar QR Empresa</button>
           <div id="qr-container" style="margin-top:10px;"></div>
         </li>
@@ -95,6 +94,8 @@
         <button id="btnSaveDraft" class="btn-outline" type="button">Guardar Borrador</button>
       </div>
     </section>
+
+    <section class="table-container section-spacing">
       <h3>Ventas recientes</h3>
 
       <table id="salesTable" class="table">
@@ -110,6 +111,7 @@
         </thead>
         <tbody></tbody>
       </table>
+    </section>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -122,9 +124,9 @@
   <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 
+  <script src="js/roles.js?v=20260623-roles"></script>
   <script src="js/auth.js?v=20260602-reservas-planilla" defer></script>
   <script src="js/models/sales.model.js?v=20260602-reservas-planilla" defer></script>
-  <script src="js/controllers/sales.controller.js?v=20260602-reservas-planilla" defer></script>
+  <script src="js/controllers/sales.controller.js?v=20260623-roles" defer></script>
 </body>
-
 </html>

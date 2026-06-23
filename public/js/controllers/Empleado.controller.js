@@ -55,6 +55,7 @@
         isss: document.getElementById("empleado-isss"),
         afp: document.getElementById("empleado-afp"),
         salario: document.getElementById("empleado-salario"),
+        role: document.getElementById("empleado-role"),
         ayudaEconomica: document.getElementById("empleado-ayuda-economica"),
         bonificacion: document.getElementById("empleado-bonificacion"),
         nacimiento: document.getElementById("empleado-nacimiento"),
@@ -108,6 +109,20 @@
 
     setValue(el, value) {
       if (el) el.value = (value === null || typeof value === "undefined") ? "" : value;
+    }
+
+    normalizeRoleForForm(role) {
+      const normalized = global.RolePolicy?.normalizeRole
+        ? global.RolePolicy.normalizeRole(role)
+        : String(role || "").trim().toLowerCase();
+
+      return global.RolePolicy?.isAssignableRole?.(normalized) ? normalized : "pendiente";
+    }
+
+    formatRole(role) {
+      return global.RolePolicy?.roleLabel
+        ? global.RolePolicy.roleLabel(role)
+        : String(role || "");
     }
 
     getSucursalNombre(id) {
@@ -612,7 +627,11 @@
         return false;
       }
 
-      if (resolvedRole !== "admin") {
+      const canManageEmployees = global.RolePolicy?.can
+        ? global.RolePolicy.can(resolvedRole, "empleados")
+        : resolvedRole === "admin";
+
+      if (!canManageEmployees) {
         console.log("[EmpleadoController] No tienes permisos de administrador.", userData);
         await this.safeSignOutAndRedirect("not-admin");
         return false;
@@ -715,6 +734,7 @@
     resetForm() {
       if (this.els.form) this.els.form.reset();
       if (this.els.nuevaPasswordContainer) this.els.nuevaPasswordContainer.style.display = "none";
+      if (this.els.role) this.els.role.value = "barra";
       if (this.els.ayudaEconomica) this.els.ayudaEconomica.value = "0";
       if (this.els.bonificacion) this.els.bonificacion.value = "0";
     }
@@ -729,6 +749,7 @@
       this.setValue(this.els.isss, u.isss);
       this.setValue(this.els.afp, u.afp);
       this.setValue(this.els.salario, u.salario_h || u.salarioH || 0);
+      this.setValue(this.els.role, this.normalizeRoleForForm(u.role || "barra"));
       this.setValue(this.els.ayudaEconomica, u.ayuda_economica ?? u.ayudaEconomica ?? 0);
       this.setValue(this.els.bonificacion, u.bonificacion ?? 0);
       this.setValue(this.els.nacimiento, u.nacimiento ? new Date(u.nacimiento).toISOString().slice(0, 10) : "");
@@ -748,6 +769,7 @@
         isss: getVal(this.els.isss),
         afp: getVal(this.els.afp),
         salarioH: parseFloat(getVal(this.els.salario)) || 0,
+        role: getVal(this.els.role) || "barra",
         ayudaEconomica: parseFloat(getVal(this.els.ayudaEconomica)) || 0,
         bonificacion: parseFloat(getVal(this.els.bonificacion)) || 0,
         nacimiento: getVal(this.els.nacimiento),
@@ -801,7 +823,7 @@
         const bonificacion = this.escapeHtml(this.formatMoney(u.bonificacion ?? 0));
         const salario = this.escapeHtml(this.formatMoney(u.salario_h || u.salarioH || 0));
         const sucursal = this.escapeHtml(u.sucursal_nombre || this.getSucursalNombre(u.sucursal_id));
-        const role = this.escapeHtml(u.role || "");
+        const role = this.escapeHtml(this.formatRole(u.role || ""));
         const createdAt = this.escapeHtml(this.formatDateTime(u.created_at));
         const updatedAt = this.escapeHtml(this.formatDateTime(u.updated_at));
         const id = this.escapeHtml(u.id);
@@ -993,6 +1015,7 @@
           descripcion: form.descripcion || null,
           isss: form.isss || null,
           afp: form.afp || null,
+          role: this.normalizeRoleForForm(form.role),
           sucursal_id: resolvedSucursalId,
           empresa_id: this.adminEmpresa || "UNICA EMPRESA"
         };
@@ -1016,7 +1039,6 @@
               email: form.email,
               password: form.password1,
               data: {
-                role: "empleado",
                 ...commonData
               },
               jornadas: form.jornadas

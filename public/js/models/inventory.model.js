@@ -323,15 +323,15 @@
 
     const baseText = detalles.length
       ? detalles
-          .map((d) => {
-            const nombreProducto =
-              d.productos?.nombre ||
-              d.producto_nombre ||
-              d.nombre ||
-              "Producto";
-            return `${nombreProducto} x${Number(d.cantidad || 0)}`;
-          })
-          .join(", ")
+        .map((d) => {
+          const nombreProducto =
+            d.productos?.nombre ||
+            d.producto_nombre ||
+            d.nombre ||
+            "Producto";
+          return `${nombreProducto} x${Number(d.cantidad || 0)}`;
+        })
+        .join(", ")
       : "-";
 
     if (venta?.observacion && String(venta.observacion).trim()) {
@@ -1348,6 +1348,10 @@
     }
   }
 
+  function getRolePolicy() {
+    return global.RolePolicy || null;
+  }
+
   async function getRecipeDetails(recipeId) {
     try {
       const rows = await fetchTableRows("receta_detalle", "*");
@@ -1719,7 +1723,7 @@
       } else if (payload.tipo_producto === "trago_preparado") {
         // El vínculo se maneja al guardar la receta.
       } else if (payload.tipo_producto === "botella" || payload.tipo_producto === "servicio") {
-        await removeInsumoProduct(productId).catch(() => {});
+        await removeInsumoProduct(productId).catch(() => { });
       }
 
       const product = data || { productos_id: productId, ...updatePayload };

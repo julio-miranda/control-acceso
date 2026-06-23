@@ -91,7 +91,7 @@
         isss: usuario.isss || null,
         descripcion: usuario.descripcion || null,
         salario_h: usuario.salario_h ?? 0,
-        role: usuario.role || "empleado",
+        role: usuario.role || window.RolePolicy?.ROLES?.PENDIENTE || "pendiente",
         sucursal_id: usuario.sucursal_id,
         contacto_id: contactoId
       };

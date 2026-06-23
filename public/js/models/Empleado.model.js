@@ -14,6 +14,16 @@
     static UNICA_EMPRESA_ID = "UNICA EMPRESA";
     static UNICA_EMPRESA_NOMBRE = "Vértigo";
 
+    static EMPLOYEE_ROLES = [
+      "admin",
+      "gerente",
+      "barra",
+      "bodega",
+      "empleado",
+      "cajero",
+      "developer"
+    ];
+
     constructor(supabaseClient) {
       if (!supabaseClient) {
         throw new Error("Supabase no está inicializado.");
@@ -47,6 +57,11 @@
       return Number.isFinite(n) ? n : fallback;
     }
 
+    normalizeRole(role) {
+      if (global.RolePolicy?.normalizeRole) return global.RolePolicy.normalizeRole(role);
+      return String(role || "").trim().toLowerCase();
+    }
+
     mapEmpleadoViewRow(row) {
       if (!row) return null;
 
@@ -65,7 +80,7 @@
         salario_h: row.salario_h ?? 0,
         ayuda_economica: row.ayuda_economica ?? 0,
         bonificacion: row.bonificacion ?? 0,
-        role: row.role || "empleado",
+        role: this.normalizeRole(row.role || "barra"),
         sucursal_id: row.sucursal_id || null,
         sucursal_nombre: row.sucursal_nombre || null,
         sucursal_codigo: row.sucursal_codigo || null,
@@ -85,8 +100,8 @@
       try {
         const { data, error } = await this.supabase
           .from("empresa")
-          .select("id,nombre")
-          .eq("id", empresaId)
+          .select("empresa_id,nombre")
+          .eq("empresa_id", empresaId)
           .maybeSingle();
 
         if (error) {
@@ -95,13 +110,13 @@
         }
 
         return data || {
-          id: EmpleadoModel.UNICA_EMPRESA_ID,
+          empresa_id: EmpleadoModel.UNICA_EMPRESA_ID,
           nombre: EmpleadoModel.UNICA_EMPRESA_NOMBRE
         };
       } catch (err) {
         logError("getEmpresaById(catch)", err, { id: empresaId });
         return {
-          id: EmpleadoModel.UNICA_EMPRESA_ID,
+          empresa_id: EmpleadoModel.UNICA_EMPRESA_ID,
           nombre: EmpleadoModel.UNICA_EMPRESA_NOMBRE
         };
       }
@@ -113,8 +128,8 @@
 
       const { data, error } = await this.supabase
         .from("sucursales")
-        .select("id,nombre,codigo,empresa_id")
-        .eq("id", targetId)
+        .select("sucursales_id,nombre,codigo,empresa_id")
+        .eq("sucursales_id", targetId)
         .maybeSingle();
 
       if (error) {
@@ -131,7 +146,7 @@
 
       const { data, error } = await this.supabase
         .from("sucursales")
-        .select("id")
+        .select("sucursales_id")
         .eq("empresa_id", targetEmpresaId);
 
       if (error) {
@@ -140,7 +155,7 @@
       }
 
       return (Array.isArray(data) ? data : [])
-        .map(r => r.id)
+        .map(r => r.sucursales_id)
         .filter(Boolean);
     }
 
@@ -150,7 +165,7 @@
 
       const { data, error } = await this.supabase
         .from("sucursales")
-        .select("id")
+        .select("sucursales_id")
         .eq("empresa_id", targetEmpresaId)
         .order("created_at", { ascending: true })
         .limit(1)
@@ -161,7 +176,7 @@
         throw error;
       }
 
-      return data?.id || null;
+      return data?.sucursales_id || null;
     }
 
     async resolveSucursalId({ empresaId = null, preferredSucursalId = null } = {}) {
@@ -177,9 +192,9 @@
           return null;
         });
 
-        if (row?.id) {
+        if (row?.sucursales_id) {
           if (!targetEmpresaId || this.normalizeId(row.empresa_id) === targetEmpresaId) {
-            return row.id;
+            return row.sucursales_id;
           }
 
           logError(
@@ -205,7 +220,7 @@
 
       const { data, error } = await this.supabase
         .from("sucursales")
-        .select("id,empresa_id")
+        .select("sucursales_id,empresa_id")
         .order("created_at", { ascending: true })
         .limit(1)
         .maybeSingle();
@@ -215,13 +230,13 @@
         throw error;
       }
 
-      if (!data?.id || !this.isUuid(data.id)) return null;
+      if (!data?.sucursales_id || !this.isUuid(data.sucursales_id)) return null;
 
       if (targetEmpresaId && this.normalizeId(data.empresa_id) !== targetEmpresaId) {
         return null;
       }
 
-      return data.id;
+      return data.sucursales_id;
     }
 
     async getContactsMapByIds(ids) {
@@ -230,22 +245,22 @@
 
       const { data, error } = await this.supabase
         .from("contactos")
-        .select("id,nombre,telefono,email,identificacion,direccion,created_at,updated_at")
-        .in("id", unique);
+        .select("contactos_id,nombre,telefono,email,identificacion,direccion,created_at,updated_at")
+        .in("contactos_id", unique);
 
       if (error) {
         logError("getContactsMapByIds", error, { ids: unique });
         throw error;
       }
 
-      return Object.fromEntries((data || []).map(row => [row.id, row]));
+      return Object.fromEntries((data || []).map(row => [row.contactos_id, row]));
     }
 
     async getEmpleadoBaseById(id) {
       const { data, error } = await this.supabase
         .from("usuarios")
-        .select("id,role,sucursal_id,contacto_id,nacimiento,identificacion_nombre,afp,isss,descripcion,salario_h,ayuda_economica,bonificacion,created_at,updated_at")
-        .eq("id", id)
+        .select("usuarios_id:usuarios_id,role,sucursal_id,contacto_id,nacimiento,identificacion_nombre,afp,isss,descripcion,salario_h,ayuda_economica,bonificacion,created_at,updated_at")
+        .eq("usuarios_id", id)
         .maybeSingle();
 
       if (error) {
@@ -253,7 +268,24 @@
         throw error;
       }
 
-      return data || null;
+      if (!data) return null;
+
+      return {
+        id: data.usuarios_id || null,
+        role: data.role || null,
+        sucursal_id: data.sucursal_id || null,
+        contacto_id: data.contacto_id || null,
+        nacimiento: data.nacimiento || null,
+        identificacion_nombre: data.identificacion_nombre || null,
+        afp: data.afp || null,
+        isss: data.isss || null,
+        descripcion: data.descripcion || null,
+        salario_h: data.salario_h || 0,
+        ayuda_economica: data.ayuda_economica || 0,
+        bonificacion: data.bonificacion || 0,
+        created_at: data.created_at || null,
+        updated_at: data.updated_at || null
+      };
     }
 
     async getEmpleadoCombinadoById(id) {
@@ -312,7 +344,7 @@
           salario_h: base.salario_h || 0,
           ayuda_economica: base.ayuda_economica || 0,
           bonificacion: base.bonificacion || 0,
-          role: base.role || "empleado",
+          role: this.normalizeRole(base.role || "barra"),
           sucursal_id: base.sucursal_id || null,
           sucursal_nombre: sucursalNombre,
           sucursal_codigo: sucursalCodigo,
@@ -343,11 +375,13 @@
             })
           : [];
 
+      const rolesToShow = EmpleadoModel.EMPLOYEE_ROLES;
+
       try {
         let q = this.supabase
           .from("v_usuarios")
           .select("id,nombre,email,telefono,identificacion,direccion,identificacion_nombre,nacimiento,afp,isss,descripcion,salario_h,ayuda_economica,bonificacion,role,sucursal_id,sucursal_nombre,sucursal_codigo,empresa_id,empresa_nombre,contacto_id,created_at,updated_at,contacto_created_at,contacto_updated_at")
-          .eq("role", "empleado")
+          .in("role", rolesToShow)
           .order("nombre", { ascending: true });
 
         if (targetEmpresaId) q = q.eq("empresa_id", targetEmpresaId);
@@ -358,15 +392,15 @@
           return (Array.isArray(data) ? data : []).map(row => this.mapEmpleadoViewRow(row));
         }
 
-        logError("getEmpleados(v_usuarios)", error, { empresaId: targetEmpresaId, sucursalIds });
+        logError("getEmpleados(v_usuarios)", error, { empresaId: targetEmpresaId, sucursalIds, rolesToShow });
       } catch (err) {
-        logError("getEmpleados(v_usuarios) catch", err, { empresaId: targetEmpresaId, sucursalIds });
+        logError("getEmpleados(v_usuarios) catch", err, { empresaId: targetEmpresaId, sucursalIds, rolesToShow });
       }
 
       let fallback = this.supabase
         .from("usuarios")
-        .select("id,role,sucursal_id,contacto_id,nacimiento,identificacion_nombre,afp,isss,descripcion,salario_h,ayuda_economica,bonificacion,created_at,updated_at")
-        .eq("role", "empleado")
+        .select("usuarios_id:usuarios_id,role,sucursal_id,contacto_id,nacimiento,identificacion_nombre,afp,isss,descripcion,salario_h,ayuda_economica,bonificacion,created_at,updated_at")
+        .in("role", rolesToShow)
         .order("created_at", { ascending: true });
 
       if (sucursalIds.length > 0) {
@@ -375,7 +409,7 @@
 
       const { data, error } = await fallback;
       if (error) {
-        logError("getEmpleados(fallback usuarios)", error, { empresaId: targetEmpresaId, sucursalIds });
+        logError("getEmpleados(fallback usuarios)", error, { empresaId: targetEmpresaId, sucursalIds, rolesToShow });
         throw error;
       }
 
@@ -420,7 +454,7 @@
         const contact = row.contacto_id ? contactsMap[row.contacto_id] : null;
 
         mapped.push({
-          id: row.id,
+          id: row.usuarios_id || row.id || null,
           nombre: contact?.nombre || "Sin nombre",
           email: contact?.email || null,
           telefono: contact?.telefono || null,
@@ -434,7 +468,7 @@
           salario_h: row.salario_h || 0,
           ayuda_economica: row.ayuda_economica || 0,
           bonificacion: row.bonificacion || 0,
-          role: row.role || "empleado",
+          role: this.normalizeRole(row.role || "barra"),
           sucursal_id: row.sucursal_id || null,
           sucursal_nombre: sucursalNombre,
           sucursal_codigo: sucursalCodigo,
@@ -461,8 +495,8 @@
 
       const { data, error } = await this.supabase
         .from("usuarios")
-        .select("id,role,sucursal_id,contacto_id,nacimiento,identificacion_nombre,afp,isss,descripcion,salario_h,ayuda_economica,bonificacion,created_at,updated_at")
-        .eq("id", id)
+        .select("usuarios_id:usuarios_id,role,sucursal_id,contacto_id,nacimiento,identificacion_nombre,afp,isss,descripcion,salario_h,ayuda_economica,bonificacion,created_at,updated_at")
+        .eq("usuarios_id", id)
         .maybeSingle();
 
       if (error) {
@@ -494,7 +528,7 @@
       }
 
       return {
-        id: data.id,
+        id: data.usuarios_id || data.id || null,
         nombre: contacto?.nombre || "Sin nombre",
         email: contacto?.email || null,
         telefono: contacto?.telefono || null,
@@ -508,7 +542,7 @@
         salario_h: data.salario_h || 0,
         ayuda_economica: data.ayuda_economica || 0,
         bonificacion: data.bonificacion || 0,
-        role: data.role || "empleado",
+        role: this.normalizeRole(data.role || "barra"),
         sucursal_id: data.sucursal_id || null,
         sucursal_nombre: sucursalNombre,
         sucursal_codigo: sucursalCodigo,
@@ -538,7 +572,7 @@
       try {
         let q = this.supabase
           .from("jornadas")
-          .select("id,nombre,sucursal_id,activo,hora_entrada,hora_salida")
+          .select("id:jornadas_id,nombre,sucursal_id,activo,hora_entrada,hora_salida")
           .order("nombre", { ascending: true });
 
         if (sucursalIds.length > 0) q = q.in("sucursal_id", sucursalIds);
@@ -618,7 +652,7 @@
 
         const { data: contactos, error: contactoError } = await this.supabase
           .from("contactos")
-          .select("id")
+          .select("contactos_id")
           .eq("email", email)
           .limit(1);
 
@@ -755,7 +789,7 @@
         return null;
       });
 
-      if (!sucursalRow?.id) {
+      if (!sucursalRow?.sucursales_id) {
         const err = new Error("La sucursal no existe en la base de datos.");
         logError("createEmpleado(sucursal not found)", err, { email, resolvedSucursalId });
         throw err;
@@ -774,13 +808,13 @@
         email,
         password,
         nombre: data?.nombre || "",
-        role: data?.role || "empleado",
+        role: data?.role || "barra",
         sucursal_id: resolvedSucursalId,
         empresa_id: normalizedEmpresaId,
         sucursal: sucursalRow,
         data: {
           nombre: data?.nombre || "",
-          role: data?.role || "empleado",
+          role: data?.role || "barra",
           sucursal_id: resolvedSucursalId,
           empresa_id: normalizedEmpresaId,
           nacimiento: data?.nacimiento || null,
@@ -841,7 +875,7 @@
         bonificacion: typeof data?.bonificacion !== "undefined"
           ? this.cleanNumber(data.bonificacion, currentView?.bonificacion ?? 0)
           : (currentView?.bonificacion ?? 0),
-        role: data?.role || currentView?.role || "empleado",
+        role: data?.role || currentView?.role || "barra",
         sucursal_id: data?.sucursal_id || currentView?.sucursal_id || null,
         empresa_id: data?.empresa_id || currentView?.empresa_id || EmpleadoModel.UNICA_EMPRESA_ID
       };
@@ -858,7 +892,7 @@
             identificacion: merged.identificacion,
             direccion: merged.direccion
           })
-          .eq("id", contactoId);
+          .eq("contactos_id", contactoId);
 
         if (contactoError) {
           logError("updateEmpleado(contactos update)", contactoError, { id, contactoId, merged });
@@ -870,24 +904,24 @@
         if (merged.email) {
           const { data: foundByEmail, error } = await this.supabase
             .from("contactos")
-            .select("id")
+            .select("contactos_id")
             .eq("email", merged.email)
             .limit(1);
 
-          if (!error && Array.isArray(foundByEmail) && foundByEmail[0]?.id) {
-            foundContactId = foundByEmail[0].id;
+          if (!error && Array.isArray(foundByEmail) && foundByEmail[0]?.contactos_id) {
+            foundContactId = foundByEmail[0].contactos_id;
           }
         }
 
         if (!foundContactId && merged.identificacion) {
           const { data: foundById, error } = await this.supabase
             .from("contactos")
-            .select("id")
+            .select("contactos_id")
             .eq("identificacion", merged.identificacion)
             .limit(1);
 
-          if (!error && Array.isArray(foundById) && foundById[0]?.id) {
-            foundContactId = foundById[0].id;
+          if (!error && Array.isArray(foundById) && foundById[0]?.contactos_id) {
+            foundContactId = foundById[0].contactos_id;
           }
         }
 
@@ -903,7 +937,7 @@
               identificacion: merged.identificacion,
               direccion: merged.direccion
             })
-            .eq("id", contactoId);
+            .eq("contactos_id", contactoId);
 
           if (contactoError) {
             logError("updateEmpleado(contactos update after lookup)", contactoError, { id, contactoId, merged });
@@ -925,7 +959,7 @@
               identificacion: merged.identificacion,
               direccion: merged.direccion
             }])
-            .select("id")
+            .select("contactos_id")
             .single();
 
           if (contactoInsertError) {
@@ -933,7 +967,7 @@
             throw contactoInsertError;
           }
 
-          contactoId = nuevoContacto?.id || null;
+          contactoId = nuevoContacto?.contactos_id || null;
         }
       }
 
@@ -970,7 +1004,7 @@
       const { error } = await this.supabase
         .from("usuarios")
         .update(usuarioPayload)
-        .eq("id", id);
+        .eq("usuarios_id", id);
 
       if (error) {
         logError("updateEmpleado(usuarios)", error, { id, usuarioPayload, jornadas });

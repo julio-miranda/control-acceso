@@ -4,6 +4,7 @@
 
   const supabase = window.supabase;
   const AuthModel = window.AuthModel || null;
+  const rolePolicy = window.RolePolicy || null;
 
   if (!supabase) {
     console.error("Supabase no inicializado.");
@@ -12,6 +13,7 @@
 
   const state = {
     currentUser: null,
+    currentRole: null,
     eventsCache: [],
     tablesCache: [],
     vipCache: [],
@@ -19,6 +21,29 @@
     currentEmpresaId: null,
     currentSucursalId: null
   };
+
+  function normalizeRole(role) {
+    if (rolePolicy?.normalizeRole) return rolePolicy.normalizeRole(role);
+    return String(role || "").trim().toLowerCase();
+  }
+
+  function canAccessReservasModule(role) {
+    const normalized = normalizeRole(role);
+
+    if (rolePolicy?.can) {
+      const allowedByPolicy =
+        rolePolicy.can(normalized, "reservas") ||
+        rolePolicy.can(normalized, "reservations");
+
+      if (allowedByPolicy) return true;
+    }
+
+    return ["admin", "gerente"].includes(normalized);
+  }
+
+  function canManageReservas(role) {
+    return canAccessReservasModule(role);
+  }
 
   function currency(n) {
     return new Intl.NumberFormat("es-ES", {
@@ -54,6 +79,7 @@
 
   function setCurrentUser(user) {
     state.currentUser = user || null;
+    state.currentRole = normalizeRole(user?.role || "");
     state.currentEmpresaId = user?.empresa_id || null;
     state.currentSucursalId = user?.sucursal_id || null;
 
@@ -68,6 +94,10 @@
 
   function getCurrentUser() {
     return state.currentUser;
+  }
+
+  function getCurrentRole() {
+    return state.currentRole || normalizeRole(state.currentUser?.role || "");
   }
 
   async function getSessionUid() {
@@ -141,10 +171,23 @@
 
       return {
         ...data,
-        role: String(data.role || "empleado").toLowerCase()
+        role: normalizeRole(data.role || "empleado")
       };
     } catch (e) {
       console.error("fetchUserFromDBById:", e);
+      return null;
+    }
+  }
+
+  async function getAuthUser() {
+    try {
+      const { data, error } = await supabase.auth.getUser();
+      if (error) {
+        console.warn("getAuthUser error:", error);
+      }
+      return data?.user || null;
+    } catch (e) {
+      console.warn("getAuthUser catch:", e);
       return null;
     }
   }
@@ -173,11 +216,11 @@
         email: authUser?.email || null,
         telefono: authUser?.user_metadata?.telefono || null,
         direccion: authUser?.user_metadata?.direccion || null,
-        role: String(
+        role: normalizeRole(
           authUser?.app_metadata?.role ||
           authUser?.user_metadata?.role ||
           "empleado"
-        ).toLowerCase(),
+        ),
         sucursal_id:
           authUser?.app_metadata?.sucursal_id ||
           authUser?.user_metadata?.sucursal_id ||
@@ -195,19 +238,6 @@
       return setCurrentUser(fallback);
     } catch (e) {
       console.error("bootstrapAuth error:", e);
-      return null;
-    }
-  }
-
-  async function getAuthUser() {
-    try {
-      const { data, error } = await supabase.auth.getUser();
-      if (error) {
-        console.warn("getAuthUser error:", error);
-      }
-      return data?.user || null;
-    } catch (e) {
-      console.warn("getAuthUser catch:", e);
       return null;
     }
   }
@@ -681,6 +711,11 @@
   }
 
   async function createEvent(payload) {
+    const role = getCurrentRole();
+    if (!canManageReservas(role)) {
+      return { ok: false, message: "No tienes permisos para crear eventos." };
+    }
+
     const sucursalId = getUserSucursalFilter();
     const uid = await getSessionUid();
 
@@ -877,6 +912,11 @@
   }
 
   async function createReservation(payload, mode = "evento") {
+    const role = getCurrentRole();
+    if (!canManageReservas(role)) {
+      return { ok: false, message: "No tienes permisos para crear reservas." };
+    }
+
     if (!payload?.evento_id) {
       return { ok: false, message: "Selecciona un evento." };
     }
@@ -923,6 +963,11 @@
   }
 
   async function createMesa(payload) {
+    const role = getCurrentRole();
+    if (!canManageReservas(role)) {
+      return { ok: false, message: "No tienes permisos para crear mesas." };
+    }
+
     const sucursalId = getUserSucursalFilter();
 
     if (!sucursalId) {
@@ -983,6 +1028,11 @@
   }
 
   async function updateReservation(reservationId, payload = {}) {
+    const role = getCurrentRole();
+    if (!canManageReservas(role)) {
+      return { ok: false, message: "No tienes permisos para editar reservas." };
+    }
+
     const reservation = state.reservationsCache.find(r => String(r.id) === String(reservationId)) || null;
     if (!reservation) {
       return { ok: false, message: "Reserva no encontrada." };
@@ -1069,6 +1119,11 @@
   }
 
   async function deleteReservation(reservationId) {
+    const role = getCurrentRole();
+    if (!canManageReservas(role)) {
+      return { ok: false, message: "No tienes permisos para eliminar reservas." };
+    }
+
     const reservation = state.reservationsCache.find(r => String(r.id) === String(reservationId)) || null;
 
     const { error } = await supabase
@@ -1106,10 +1161,14 @@
     numberOrZero,
     parseDate,
     formatDate,
+    normalizeRole,
+    canAccessReservasModule,
+    canManageReservas,
     bootstrapAuth,
     getAuthUser,
     setCurrentUser,
     getCurrentUser,
+    getCurrentRole,
     getUserEmpresaFilter,
     getUserSucursalFilter,
     getEventTypes,

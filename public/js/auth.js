@@ -29,7 +29,12 @@
             return null;
         }
 
-        return data?.role ? String(data.role).toLowerCase() : null;
+        return data?.role ? normalizeRole(data.role) : null;
+    }
+
+    function normalizeRole(role) {
+        if (global.RolePolicy?.normalizeRole) return global.RolePolicy.normalizeRole(role);
+        return String(role || "").trim().toLowerCase();
     }
 
     async function getUserRole(userId) {
@@ -57,7 +62,7 @@
                 session?.user?.user_metadata?.role ??
                 null;
 
-            return metaRole ? String(metaRole).toLowerCase() : null;
+            return metaRole ? normalizeRole(metaRole) : null;
         } catch (err) {
             logError("getUserRole(catch)", err, { userId });
             return null;
@@ -95,20 +100,6 @@
                 role,
                 hasSession: !!session
             });
-
-            if (role && role !== "admin") {
-                console.log("[AuthModel] Usuario no es admin, redirigiendo a index.html", {
-                    userId: user.id,
-                    role
-                });
-
-                await supabase.auth.signOut().catch(err => {
-                    logError("signInWithPassword(signOut no admin)", err, { userId: user.id });
-                });
-
-                window.location.href = "index.html";
-                return { data, error: null, role, redirected: true };
-            }
 
             return { data, error: null, role, redirected: false };
         } catch (err) {
