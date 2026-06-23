@@ -60,8 +60,19 @@
     asistencia: [ROLES.ADMIN, ROLES.GERENTE, ROLES.BARRA, ROLES.BODEGA],
     employee: [ROLES.ADMIN, ROLES.GERENTE, ROLES.BARRA, ROLES.BODEGA],
 
-    inventory: [ROLES.ADMIN, ROLES.GERENTE, ROLES.BODEGA],
-    inventario: [ROLES.ADMIN, ROLES.GERENTE, ROLES.BODEGA],
+    inventory: [
+      ROLES.ADMIN,
+      ROLES.GERENTE,
+      ROLES.BODEGA,
+      ROLES.BARRA
+    ],
+
+    inventario: [
+      ROLES.ADMIN,
+      ROLES.GERENTE,
+      ROLES.BODEGA,
+      ROLES.BARRA
+    ],
 
     sales: [ROLES.ADMIN, ROLES.GERENTE, ROLES.BARRA],
     ventas: [ROLES.ADMIN, ROLES.GERENTE, ROLES.BARRA],

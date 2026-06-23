@@ -109,9 +109,26 @@
   }
 
   function canAccessInventory(role) {
-    if (rolePolicy?.can) return rolePolicy.can(role, "inventory") || rolePolicy.can(role, "inventario");
+    if (rolePolicy?.can) {
+      return (
+        rolePolicy.can(role, "inventory") ||
+        rolePolicy.can(role, "inventario")
+      );
+    }
+
     const r = normalizeRole(role);
-    return ["admin", "gerente", "bodega"].includes(r);
+
+    // Barra ahora puede acceder
+    return ["admin", "gerente", "bodega", "barra"].includes(r);
+  }
+
+  function canManageInventory(role) {
+    const r = normalizeRole(role);
+
+    return [
+      "admin",
+      "gerente"
+    ].includes(r);
   }
 
   function canManageRecipes(role) {
@@ -407,32 +424,35 @@
 
     const tdActions = document.createElement("td");
 
-    const btnEdit = document.createElement("button");
-    btnEdit.type = "button";
-    btnEdit.textContent = "Editar";
-    styleBtn(btnEdit, "edit");
-    btnEdit.addEventListener("click", () => openEditProductModal(p));
-    tdActions.appendChild(btnEdit);
+    if (canManageInventory(state.currentRole)) {
 
-    const btnRecipe = document.createElement("button");
-    btnRecipe.type = "button";
-    btnRecipe.textContent = "Receta";
-    styleBtn(btnRecipe, "recipe");
-    btnRecipe.addEventListener("click", () => openRecipeModalByProduct(p));
-    tdActions.appendChild(btnRecipe);
+      const btnEdit = document.createElement("button");
+      btnEdit.type = "button";
+      btnEdit.textContent = "Editar";
+      styleBtn(btnEdit, "edit");
+      btnEdit.addEventListener("click", () => openEditProductModal(p));
+      tdActions.appendChild(btnEdit);
 
-    const btnDel = document.createElement("button");
-    btnDel.type = "button";
-    btnDel.textContent = "Desactivar";
-    styleBtn(btnDel, "delete");
+      const btnRecipe = document.createElement("button");
+      btnRecipe.type = "button";
+      btnRecipe.textContent = "Receta";
+      styleBtn(btnRecipe, "recipe");
+      btnRecipe.addEventListener("click", () => openRecipeModalByProduct(p));
+      tdActions.appendChild(btnRecipe);
 
-    if (isAdminRole(state.currentRole)) {
-      btnDel.addEventListener("click", () => confirmDeleteProduct(p));
-    } else {
-      btnDel.disabled = true;
-      btnDel.title = "Solo administrador puede desactivar productos";
+      const btnDel = document.createElement("button");
+      btnDel.type = "button";
+      btnDel.textContent = "Desactivar";
+      styleBtn(btnDel, "delete");
+
+      if (isAdminRole(state.currentRole)) {
+        btnDel.addEventListener("click", () => confirmDeleteProduct(p));
+      } else {
+        btnDel.disabled = true;
+      }
+
+      tdActions.appendChild(btnDel);
     }
-    tdActions.appendChild(btnDel);
 
     const btnMov = document.createElement("button");
     btnMov.type = "button";
@@ -781,7 +801,7 @@
       return;
     }
 
-    if (!canAccessInventory(state.currentRole)) {
+    if (!canManageInventory(state.currentRole)) {
       notifyError("No tienes permisos para gestionar inventario.");
       return;
     }
@@ -1005,7 +1025,7 @@
       return;
     }
 
-    if (!canAccessInventory(state.currentRole)) {
+    if (!canManageInventory(state.currentRole)) {
       notifyError("No tienes permisos para editar inventario.");
       return;
     }
@@ -1438,7 +1458,17 @@
       mergedUser.role = role || "bodega";
       applyModelContext(mergedUser, uid);
       applyNavbarByRole(role);
-      
+
+      const readOnly = !canManageInventory(role);
+
+      if (el.btnAdd) {
+        el.btnAdd.style.display = readOnly ? "none" : "";
+      }
+
+      if (el.btnRecetas) {
+        el.btnRecetas.style.display = readOnly ? "none" : "";
+      }
+
       if (el.btnLogout) {
         el.btnLogout.addEventListener("click", async (e) => {
           e.preventDefault();
