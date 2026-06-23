@@ -287,26 +287,27 @@
     }
 
     getDataTable(selector, order = [[1, "desc"]]) {
-      try {
-        const tbl = $(selector).DataTable({
-          responsive: false,
-          scrollX: true,
-          autoWidth: false,
-          order
-        });
-        tbl.clear();
-        return tbl;
-      } catch (e) {
-        console.warn("No se pudo inicializar DataTable:", e);
-        return null;
+
+      if ($.fn.DataTable.isDataTable(selector)) {
+        return $(selector).DataTable();
       }
+
+      return $(selector).DataTable({
+        responsive: false,
+        scrollX: true,
+        autoWidth: false,
+        order,
+        destroy: true
+      });
     }
 
     async cargarAsistencias(fechaInicio, fechaFin) {
       const tableEl = document.getElementById("asistenciasTable");
       if (!tableEl) return;
 
-      const tbl = this.getDataTable("#asistenciasTable", [[1, "desc"]]);
+      const tbl = this.getDataTable("#asistenciasTable");
+
+      tbl.clear();
 
       try {
         const asistencias = await this.model.getAsistencias({
