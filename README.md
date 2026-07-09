@@ -211,8 +211,3 @@ El proyecto implementa medidas de seguridad mediante:
 - Gestión de roles y permisos.
 - Separación entre lógica de presentación y acceso a datos.
 
----
-
-# Licencia
-
-Este proyecto se distribuye bajo la licencia que determine el propietario del repositorio.
